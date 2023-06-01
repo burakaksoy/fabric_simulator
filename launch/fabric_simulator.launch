@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>   
+    <!-- Launch the Fabric Simulation that reads the location data of robots and attaches the fabric corners to those locations  -->
+    <node type="fabric_simulator_node" name="fabric_simulator_node" pkg="fabric_simulator" output="screen">
+        <rosparam command="load" file="$(find fabric_simulator)/config/fabric_simulator.yaml" subst_value="true" />
+    </node>
+</launch>
