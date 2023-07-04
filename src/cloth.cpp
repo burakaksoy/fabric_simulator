@@ -109,6 +109,8 @@ Cloth::~Cloth(){
 void Cloth::initPhysics(const Eigen::MatrixX3i &face_tri_ids){
     int num_tris = face_tri_ids.rows();
 
+    Real total_area = 0.0;
+
     for (int i = 0; i < num_tris; i++) {
         int id0 = face_tri_ids(i,0);
         int id1 = face_tri_ids(i,1);
@@ -119,6 +121,7 @@ void Cloth::initPhysics(const Eigen::MatrixX3i &face_tri_ids){
         Eigen::Matrix<Real,1,3> c = e0.cross(e1);
 
         Real A = 0.5 * c.norm();  // area
+        
         Real mass = A * density_;
     
         if (mass > 0.0) {
@@ -136,10 +139,13 @@ void Cloth::initPhysics(const Eigen::MatrixX3i &face_tri_ids){
             inv_mass_(id1) = 1.0/p_1_mass;
             inv_mass_(id2) = 1.0/p_2_mass;
         }
+
+        total_area += A;
     }
 
     // std::cout << "inv_mass_:\n" << inv_mass_ << std::endl;
     // std::cout << "particle masses:\n" << inv_mass_.cwiseInverse() << " kg." << std::endl;
+    std::cout << "Total fabric area:\n" << total_area << " m^2." << std::endl;
     std::cout << "Total fabric mass:\n" << inv_mass_.cwiseInverse().sum() << " kg." << std::endl;
 
     
@@ -374,6 +380,14 @@ void Cloth::hangFromCorners(const int &num_corners){
                 }
                 break;
         }
+    }
+}
+
+void Cloth::setStaticParticles(const std::vector<int> &particles){
+    for (const int& i : particles)
+    {
+        inv_mass_(i) = 0.0;
+        attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector               
     }
 }
 

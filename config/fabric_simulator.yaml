@@ -8,23 +8,37 @@ set_sim_rate_auto: false  # to set the simulation rate and dt automaticall, do n
 num_substeps: 3 # Number of substeps per iteration based on 2019 Small Steps XPBD paper.
 num_steps: 1 # experimental only. do not change from 1
 
+# fabric_mesh_path: "" # .obj file, If empty, a rectangular fabric will be generated from the fabric sizes below
+fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_716262.obj
+# fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_717405.obj
+# fabric_mesh_path: $(find fabric_simulator)/mesh/MESH_717167.obj
+# fabric_mesh_path: $(find fabric_simulator)/mesh/MESH_717651.obj
+
+# If fabric_mesh_path is not empty string (i.e., "") the following parameters are not used.
 fabric_x: 2.0 # fabric x size in meters
 fabric_y: 2.0 # fabric y size in meters
+fabric_resolution: 15 # particle resolution per meter 
+
 fabric_density: 1.0 # fabric mass per meter square (kg/m^2)
-fabric_resolution: 25 # particle resolution per meter 
 
 fabric_stretching_compliance: 1.0e-9  # 0.0
-fabric_bending_compliance: 1.0e-5 # Note, fabric stretching compliance assumed to be 0.0 already.
+fabric_bending_compliance: 1.0e-3 # Note, fabric stretching compliance assumed to be 0.0 already.
 
 initial_height: 0.8 # initial fabric height from ground (m)
 
-num_hang_corners: 0 # num of corners to hang dlo from (options: 0,1,2,3,4)
+# If fabric_mesh_path is not empty string (i.e., "") num_hang_corners is NOT used.
+num_hang_corners: 4 # num of corners to hang dlo from (options: 0,1,2,3,4)
+
+custom_static_particles: [363,289,428,202] # specify the particle ids to set as static
+# custom_static_particles: [472,400,558] # specify the particle ids to set as static
+# custom_static_particles: [680,345,326] # specify the particle ids to set as static
+# custom_static_particles: [404,225,102,521] # specify the particle ids to set as static
 
 # Global artificial velocity damping coefficients. Defaults to 0.0. 
-global_damp_coeff_v: 7.1e-1 # 2.1e-4; // 0.9e-3
+global_damp_coeff_v: 0.0 # 7.1e-1 # 2.1e-4; // 0.9e-3
 
 simulation_rate: 1000.0
-rendering_rate: 100.0 # Hz, frequency to publish the fabric vertices and edges to RVIZ visualization markers
+rendering_rate: 30.0 # Hz, frequency to publish the fabric vertices and edges to RVIZ visualization markers
 
 wrench_pub_rate: 100.0 # Hz, frequency to publish the fabric forces at the attachment points
 

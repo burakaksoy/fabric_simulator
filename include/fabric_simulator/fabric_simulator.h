@@ -31,6 +31,9 @@
 #include <string>
 #include <iostream>
 
+#include <fstream>
+#include <sstream>
+
 #include "fabric_simulator/utilities/cloth.h"
 
 namespace fabric_simulator
@@ -49,6 +52,8 @@ private:
     // face triangle ids; vector with n elements with 3d integer rowvectors. each row is 3 particle id of a triangle
     // vertice: vector with m elements with 3d row vectors. each row is 3D xyz position of a particle.
     pbd_object::Mesh createMeshRectangular(const std::string &name, const Real &fabric_x, const Real &fabric_y, const Real &fabric_z, const Real &fabric_res);
+
+    pbd_object::Mesh loadMesh(const std::string &name, const std::string &path, const Real &fabric_z);
 
     void readAttachedRobotForces();
 
@@ -116,19 +121,23 @@ private:
 
     int num_substeps_;
     int num_steps_;
+
+    std::string fabric_mesh_path_;
     
     // Fabric mesh properties: (Assuming fabric is rectangular)
     Real fabric_x_; // expansion in x dimension (m)
     Real fabric_y_; // expansion in y dimension (m)
-    Real fabric_density_; // fabric mass per meter square (kg/m^2)
     Real fabric_resolution_; // particle resolution per meter
+
+    Real fabric_density_; // fabric mass per meter square (kg/m^2)
 
     Real fabric_stretching_compliance_;
     Real fabric_bending_compliance_;
     
     Real initial_height_; // initial fabric height from ground (m)
 
-    int num_hang_corners_; // num of corners to hang dlo from (options: 0,1,2,3,4)
+    int num_hang_corners_; // num of corners to hang fabric from (options: 0,1,2,3,4)
+    std::vector<int> custom_static_particles_; // particle ids to set as static
 
     Real global_damp_coeff_v_; 
     

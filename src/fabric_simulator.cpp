@@ -42,7 +42,7 @@ FabricSimulator::FabricSimulator(ros::NodeHandle &nh, ros::NodeHandle &nh_local,
 
     // Initilize parameters
     params_srv_ = nh_local_.advertiseService("params", &FabricSimulator::updateParams, this);
-    initialize();
+    initialize(); // calls updateParams, implemented in the header file (fabric_simulator.h) as a ros service call
 }
 
 FabricSimulator::~FabricSimulator() {
@@ -57,10 +57,13 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("num_substeps");
     nh_local_.deleteParam("num_steps");
 
+    nh_local_.deleteParam("fabric_mesh_path");
+
     nh_local_.deleteParam("fabric_x");
     nh_local_.deleteParam("fabric_y");
-    nh_local_.deleteParam("fabric_density");
     nh_local_.deleteParam("fabric_resolution");
+
+    nh_local_.deleteParam("fabric_density");
 
     nh_local_.deleteParam("fabric_stretching_compliance");
     nh_local_.deleteParam("fabric_bending_compliance");
@@ -68,6 +71,7 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("initial_height");
 
     nh_local_.deleteParam("num_hang_corners");
+    nh_local_.deleteParam("custom_static_particles");
 
     nh_local_.deleteParam("global_damp_coeff_v");
 
@@ -113,11 +117,14 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
     nh_local_.param<int>("num_substeps", num_substeps_, 3); //3
     nh_local_.param<int>("num_steps", num_steps_, 1);
+
+    nh_local_.param<std::string>("fabric_mesh_path", fabric_mesh_path_, std::string(""));
     
     nh_local_.param<Real>("fabric_x", fabric_x_, 2.); //2
     nh_local_.param<Real>("fabric_y", fabric_y_, 2.); //2
-    nh_local_.param<Real>("fabric_density", fabric_density_, 1.0);
     nh_local_.param<Real>("fabric_resolution", fabric_resolution_, 10); //10
+
+    nh_local_.param<Real>("fabric_density", fabric_density_, 1.0);
 
     nh_local_.param<Real>("fabric_stretching_compliance", fabric_stretching_compliance_, 0.01);
     nh_local_.param<Real>("fabric_bending_compliance", fabric_bending_compliance_, 0.01);
@@ -125,6 +132,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<Real>("initial_height", initial_height_, 0.8);
 
     nh_local_.param<int>("num_hang_corners", num_hang_corners_, 2);
+    nh_local_.param("custom_static_particles", custom_static_particles_, std::vector<int>());
 
     nh_local_.param<Real>("global_damp_coeff_v", global_damp_coeff_v_, 0.0);
     
@@ -162,9 +170,17 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     // Initilize gravity vector
     gravity_ << gravity_x_, gravity_y_, gravity_z_;    
 
-    //Create mesh
     std::string fabric_name = "cloth";
-    pbd_object::Mesh fabric_mesh = FabricSimulator::createMeshRectangular(fabric_name ,fabric_x_, fabric_y_, initial_height_, fabric_resolution_);
+
+    pbd_object::Mesh fabric_mesh;
+
+    if(fabric_mesh_path_.empty()) {
+        //Create mesh
+        fabric_mesh = FabricSimulator::createMeshRectangular(fabric_name, fabric_x_, fabric_y_, initial_height_, fabric_resolution_);
+    } else {
+        //Load mesh
+        fabric_mesh = FabricSimulator::loadMesh(fabric_name, fabric_mesh_path_, initial_height_);
+    }
 
     // std::cout << "fabric_mesh.name: " << fabric_mesh.name << std::endl;
     // std::cout << "fabric_mesh.vertices:\n" << fabric_mesh.vertices << std::endl;
@@ -177,8 +193,13 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
                                 fabric_density_,
                                 global_damp_coeff_v_);
 
-    // Hang fabric from corners
-    fabric_.hangFromCorners(num_hang_corners_);
+    if(fabric_mesh_path_.empty()) {
+        // Hang fabric from corners
+        fabric_.hangFromCorners(num_hang_corners_);
+    }
+    
+    // Set static particles
+    fabric_.setStaticParticles(custom_static_particles_);
 
     if (p_active_ != prev_active) {
         if (p_active_) {
@@ -372,6 +393,56 @@ pbd_object::Mesh FabricSimulator::createMeshRectangular(const std::string &name,
     }
 
     // Eigen::Map<Eigen::MatrixXi> face_tri_ids_mat((int *)face_tri_ids.data(), face_tri_ids.size(), 3);
+    Eigen::MatrixXi face_tri_ids_mat(face_tri_ids.size(), 3);
+    for (int i = 0; i < face_tri_ids.size(); i++) {
+        face_tri_ids_mat.row(i) = face_tri_ids[i];
+    }
+
+    pbd_object::Mesh mesh;
+    mesh.name = name;
+    mesh.vertices = vertices_mat;
+    mesh.face_tri_ids = face_tri_ids_mat;
+
+    return mesh;
+}
+
+pbd_object::Mesh FabricSimulator::loadMesh(const std::string &name, const std::string &path, const Real &fabric_z){
+    std::ifstream file(path);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Could not open file " + path);
+    }
+
+    std::vector<Eigen::Matrix<Real,1,3>> vertices;
+    std::vector<Eigen::RowVector3i> face_tri_ids;
+    std::string line;
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string first_word;
+        ss >> first_word;
+
+        if (first_word == "v") {
+            // Parse a vertex
+            Real x, y, z;
+            ss >> x >> y >> z;
+            vertices.push_back(Eigen::Matrix<Real,1,3>(x, y, fabric_z + z));
+        }
+        else if (first_word == "f") {
+            // Parse a face. Note that .obj file indexing starts from 1, but we use 0-based indexing.
+            int v1, v2, v3;
+            ss >> v1 >> v2 >> v3;
+            face_tri_ids.push_back(Eigen::RowVector3i(v1 - 1, v2 - 1, v3 - 1));
+        }
+    }
+    file.close();
+
+    // Convert vertices to Eigen matrix
+    Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic> vertices_mat(vertices.size(), 3);
+    for (int i = 0; i < vertices.size(); i++) {
+        vertices_mat.row(i) = vertices[i];
+    }
+
+    // Convert faces to Eigen matrix
     Eigen::MatrixXi face_tri_ids_mat(face_tri_ids.size(), 3);
     for (int i = 0; i < face_tri_ids.size(); i++) {
         face_tri_ids_mat.row(i) = face_tri_ids[i];
