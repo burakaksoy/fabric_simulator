@@ -55,6 +55,12 @@ private:
 
     pbd_object::Mesh loadMesh(const std::string &name, const std::string &path, const Real &fabric_z);
 
+    pbd_object::Mesh transformMesh(const pbd_object::Mesh &mesh, 
+                                   const std::vector<Real> &translation,
+                                   const std::vector<Real> &rotationAxis,
+                                   const Real &rotationAngle,
+                                   const std::vector<Real> &scale);
+
     void readAttachedRobotForces();
 
     // Helper functions to publish created markers
@@ -135,6 +141,10 @@ private:
     Real fabric_bending_compliance_;
     
     Real initial_height_; // initial fabric height from ground (m)
+    std::vector<Real> fabric_translation_;
+    std::vector<Real> fabric_rotationAxis_;
+    Real fabric_rotationAngle_;
+    std::vector<Real> fabric_scale_;
 
     int num_hang_corners_; // num of corners to hang fabric from (options: 0,1,2,3,4)
     std::vector<int> custom_static_particles_; // particle ids to set as static

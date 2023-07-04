@@ -69,6 +69,10 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("fabric_bending_compliance");
     
     nh_local_.deleteParam("initial_height");
+    nh_local_.deleteParam("fabric_translation");
+    nh_local_.deleteParam("fabric_rotationAxis");
+    nh_local_.deleteParam("fabric_rotationAngle");
+    nh_local_.deleteParam("fabric_scale");
 
     nh_local_.deleteParam("num_hang_corners");
     nh_local_.deleteParam("custom_static_particles");
@@ -129,9 +133,13 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<Real>("fabric_stretching_compliance", fabric_stretching_compliance_, 0.01);
     nh_local_.param<Real>("fabric_bending_compliance", fabric_bending_compliance_, 0.01);
 
-    nh_local_.param<Real>("initial_height", initial_height_, 0.8);
+    nh_local_.param<Real>("initial_height", initial_height_, 0);
+    nh_local_.param("fabric_translation", fabric_translation_, std::vector<Real>({0.0, 0.0, 0.0}));
+    nh_local_.param("fabric_rotationAxis", fabric_rotationAxis_, std::vector<Real>({0.0, 0.0, 1.0}));
+    nh_local_.param<Real>("fabric_rotationAngle", fabric_rotationAngle_, 0.0);
+    nh_local_.param("fabric_scale", fabric_scale_, std::vector<Real>({1.0, 1.0, 1.0}));
 
-    nh_local_.param<int>("num_hang_corners", num_hang_corners_, 2);
+    nh_local_.param<int>("num_hang_corners", num_hang_corners_, 0);
     nh_local_.param("custom_static_particles", custom_static_particles_, std::vector<int>());
 
     nh_local_.param<Real>("global_damp_coeff_v", global_damp_coeff_v_, 0.0);
@@ -185,6 +193,13 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     // std::cout << "fabric_mesh.name: " << fabric_mesh.name << std::endl;
     // std::cout << "fabric_mesh.vertices:\n" << fabric_mesh.vertices << std::endl;
     // std::cout << "fabric_mesh.face_tri_ids:\n" << fabric_mesh.face_tri_ids << std::endl;
+
+    // Transform the loaded mesh
+    fabric_mesh = FabricSimulator::transformMesh(fabric_mesh,
+                                                fabric_translation_,
+                                                fabric_rotationAxis_,
+                                                fabric_rotationAngle_,
+                                                fabric_scale_);
 
     // Create cloth
     fabric_ = pbd_object::Cloth(fabric_mesh, 
@@ -454,6 +469,35 @@ pbd_object::Mesh FabricSimulator::loadMesh(const std::string &name, const std::s
     mesh.face_tri_ids = face_tri_ids_mat;
 
     return mesh;
+}
+
+pbd_object::Mesh FabricSimulator::transformMesh(const pbd_object::Mesh &mesh, 
+                                   const std::vector<Real> &translation,
+                                   const std::vector<Real> &rotationAxis,
+                                   const Real &rotationAngle,
+                                   const std::vector<Real> &scale){
+    // Check size of vectors
+    assert(translation.size() == 3);
+    assert(rotationAxis.size() == 3);
+    assert(scale.size() == 3);
+
+    // Prepare translation, rotation and scale matrices
+    Eigen::Matrix<Real,3,1> translationVector(translation[0], translation[1], translation[2]);
+    Eigen::AngleAxis<Real> rotationMatrix(rotationAngle, Eigen::Matrix<Real,3,1>(rotationAxis[0], rotationAxis[1], rotationAxis[2]));
+    Eigen::Matrix<Real,3,1> scaleVector(scale[0], scale[1], scale[2]);
+
+    // Create a copy of the input mesh
+    pbd_object::Mesh transformed_mesh = mesh;
+
+    // Apply the transformation matrix to each vertex in the mesh
+    for(int i=0; i<transformed_mesh.vertices.rows(); i++)
+    {
+        Eigen::Matrix<Real,3,1> vertex = transformed_mesh.vertices.row(i).transpose();
+        vertex = rotationMatrix * (vertex.cwiseProduct(scaleVector)) + translationVector;
+        transformed_mesh.vertices.row(i) = vertex.transpose();
+    }
+
+    return transformed_mesh;
 }
 
 void FabricSimulator::simulate(const ros::TimerEvent& e){
