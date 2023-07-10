@@ -29,6 +29,16 @@ FabricSimulator::FabricSimulator(ros::NodeHandle &nh, ros::NodeHandle &nh_local,
     rob_03_attached_id_ = -1;
     rob_04_attached_id_ = -1;
 
+    rob_01_attached_ids_.clear();
+    rob_02_attached_ids_.clear();
+    rob_03_attached_ids_.clear();
+    rob_04_attached_ids_.clear();
+
+    rob_01_attached_rel_poses_.clear();
+    rob_02_attached_rel_poses_.clear();
+    rob_03_attached_rel_poses_.clear();
+    rob_04_attached_rel_poses_.clear();
+
     rob_01_attached_force_.setZero();
     rob_02_attached_force_.setZero();
     rob_03_attached_force_.setZero();
@@ -102,6 +112,8 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("wrench_04_frame_id");
     
     nh_local_.deleteParam("fabric_rob_z_offset");
+
+    nh_local_.deleteParam("robot_attach_radius");
 }
 
 bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
@@ -168,6 +180,8 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<std::string>("wrench_04_frame_id", wrench_04_frame_id_, std::string("d4_tf_fabric_mount_link"));
 
     nh_local_.param<Real>("fabric_rob_z_offset", fabric_rob_z_offset_, 0.0); // 0.785145); // makes it 80cm above ground
+
+    nh_local_.param<Real>("robot_attach_radius", robot_attach_radius_, 0.0);
 
     // Set timer periods based on the parameters
     timer_render_.setPeriod(ros::Duration(1.0/rendering_rate_));
@@ -285,6 +299,16 @@ void FabricSimulator::reset(){
     rob_02_attached_id_ = -1;
     rob_03_attached_id_ = -1;
     rob_04_attached_id_ = -1;
+
+    rob_01_attached_ids_.clear();
+    rob_02_attached_ids_.clear();
+    rob_03_attached_ids_.clear();
+    rob_04_attached_ids_.clear();
+
+    rob_01_attached_rel_poses_.clear();
+    rob_02_attached_rel_poses_.clear();
+    rob_03_attached_rel_poses_.clear();
+    rob_04_attached_rel_poses_.clear();
 
     rob_01_attached_force_.setZero();
     rob_02_attached_force_.setZero();
@@ -661,21 +685,39 @@ void FabricSimulator::odometryCb_01(const nav_msgs::Odometry::ConstPtr odom_msg)
     
     Eigen::Matrix<Real,1,3> pos(x, y, z);
 
+    Real qw = odom_msg->pose.pose.orientation.w;
+    Real qx = odom_msg->pose.pose.orientation.x;
+    Real qy = odom_msg->pose.pose.orientation.y;
+    Real qz = odom_msg->pose.pose.orientation.z;
+    Eigen::Quaternion<Real> cur_orient(qw, qx,qy, qz);
+
     if (!is_rob_01_attached_)
     {
-        // tell sim objects (fabric) to attach robot to the nearest particles
-        rob_01_attached_id_ = fabric_.attachNearest(pos);
+        // // tell sim objects (fabric) to attach robot to the nearest particle
+        // rob_01_attached_id_ = fabric_.attachNearest(pos);
         // std::cout << "self.rob_01_attached_id, " << rob_01_attached_id_ << std::endl;
 
-        if (rob_01_attached_id_ != -1)
-        {
+        // if (rob_01_attached_id_ != -1)
+        // {
+        //     is_rob_01_attached_ = true;
+        // }
+
+        rob_01_attached_orient_ = cur_orient;
+
+        // tell sim objects (fabric) to attach robot to the nearest particles within radius
+        fabric_.attachNearestWithRadius(pos, robot_attach_radius_, rob_01_attached_ids_, rob_01_attached_rel_poses_);
+
+        if (!rob_01_attached_ids_.empty()){
             is_rob_01_attached_ = true;
+            rob_01_attached_id_ = rob_01_attached_ids_[0];
         }
     }
     else
     {
-        // tell sim object to update its position
-            fabric_.updateAttachedPose(rob_01_attached_id_, pos);
+        // // tell sim object to update its position
+        // fabric_.updateAttachedPose(rob_01_attached_id_, pos);
+
+        fabric_.updateAttachedPoses(rob_01_attached_ids_, pos, rob_01_attached_rel_poses_, cur_orient, rob_01_attached_orient_);
     }
 }
 
@@ -686,21 +728,39 @@ void FabricSimulator::odometryCb_02(const nav_msgs::Odometry::ConstPtr odom_msg)
     
     Eigen::Matrix<Real,1,3> pos(x, y, z);
 
+    Real qw = odom_msg->pose.pose.orientation.w;
+    Real qx = odom_msg->pose.pose.orientation.x;
+    Real qy = odom_msg->pose.pose.orientation.y;
+    Real qz = odom_msg->pose.pose.orientation.z;
+    Eigen::Quaternion<Real> cur_orient(qw, qx,qy, qz);
+
     if (!is_rob_02_attached_)
     {
-        // tell sim objects (fabric) to attach robot to the nearest particles
-        rob_02_attached_id_ = fabric_.attachNearest(pos);
-        // std::cout << "self.rob_02_attached_id, " << rob_02_attached_id_ << std::endl;
+        // // tell sim objects (fabric) to attach robot to the nearest particle
+        // rob_02_attached_id_ = fabric_.attachNearest(pos);
+        // // std::cout << "self.rob_02_attached_id, " << rob_02_attached_id_ << std::endl;
 
-        if (rob_02_attached_id_ != -1)
-        {
+        // if (rob_02_attached_id_ != -1)
+        // {
+        //     is_rob_02_attached_ = true;
+        // }
+
+        rob_02_attached_orient_ = cur_orient;
+
+        // tell sim objects (fabric) to attach robot to the nearest particles within radius
+        fabric_.attachNearestWithRadius(pos, robot_attach_radius_, rob_02_attached_ids_, rob_02_attached_rel_poses_);
+
+        if (!rob_02_attached_ids_.empty()){
             is_rob_02_attached_ = true;
+            rob_02_attached_id_ = rob_02_attached_ids_[0];
         }
     }
     else
     {
         // tell sim object to update its position
-            fabric_.updateAttachedPose(rob_02_attached_id_, pos);
+        // fabric_.updateAttachedPose(rob_02_attached_id_, pos);
+
+        fabric_.updateAttachedPoses(rob_02_attached_ids_, pos, rob_02_attached_rel_poses_, cur_orient, rob_02_attached_orient_);
     }
 }
 
@@ -711,21 +771,39 @@ void FabricSimulator::odometryCb_03(const nav_msgs::Odometry::ConstPtr odom_msg)
     
     Eigen::Matrix<Real,1,3> pos(x, y, z);
 
+    Real qw = odom_msg->pose.pose.orientation.w;
+    Real qx = odom_msg->pose.pose.orientation.x;
+    Real qy = odom_msg->pose.pose.orientation.y;
+    Real qz = odom_msg->pose.pose.orientation.z;
+    Eigen::Quaternion<Real> cur_orient(qw, qx,qy, qz);
+
     if (!is_rob_03_attached_)
     {
-        // tell sim objects (fabric) to attach robot to the nearest particles
-        rob_03_attached_id_ = fabric_.attachNearest(pos);
-        // std::cout << "self.rob_03_attached_id, " << rob_03_attached_id_ << std::endl;
+        // // tell sim objects (fabric) to attach robot to the nearest particle
+        // rob_03_attached_id_ = fabric_.attachNearest(pos);
+        // // std::cout << "self.rob_03_attached_id, " << rob_03_attached_id_ << std::endl;
 
-        if (rob_03_attached_id_ != -1)
-        {
+        // if (rob_03_attached_id_ != -1)
+        // {
+        //     is_rob_03_attached_ = true;
+        // }
+
+        rob_03_attached_orient_ = cur_orient;
+
+        // tell sim objects (fabric) to attach robot to the nearest particles within radius
+        fabric_.attachNearestWithRadius(pos, robot_attach_radius_, rob_03_attached_ids_, rob_03_attached_rel_poses_);
+
+        if (!rob_03_attached_ids_.empty()){
             is_rob_03_attached_ = true;
+            rob_03_attached_id_ = rob_03_attached_ids_[0];
         }
     }
     else
     {
         // tell sim object to update its position
-            fabric_.updateAttachedPose(rob_03_attached_id_, pos);
+        // fabric_.updateAttachedPose(rob_03_attached_id_, pos);
+
+        fabric_.updateAttachedPoses(rob_03_attached_ids_, pos, rob_03_attached_rel_poses_, cur_orient, rob_03_attached_orient_);
     }
 }
 
@@ -736,21 +814,39 @@ void FabricSimulator::odometryCb_04(const nav_msgs::Odometry::ConstPtr odom_msg)
     
     Eigen::Matrix<Real,1,3> pos(x, y, z);
 
+    Real qw = odom_msg->pose.pose.orientation.w;
+    Real qx = odom_msg->pose.pose.orientation.x;
+    Real qy = odom_msg->pose.pose.orientation.y;
+    Real qz = odom_msg->pose.pose.orientation.z;
+    Eigen::Quaternion<Real> cur_orient(qw, qx,qy, qz);
+
     if (!is_rob_04_attached_)
     {
-        // tell sim objects (fabric) to attach robot to the nearest particles
-        rob_04_attached_id_ = fabric_.attachNearest(pos);
-        // std::cout << "self.rob_04_attached_id, " << rob_04_attached_id_ << std::endl;
+        // // tell sim objects (fabric) to attach robot to the nearest particle
+        // rob_04_attached_id_ = fabric_.attachNearest(pos);
+        // // std::cout << "self.rob_04_attached_id, " << rob_04_attached_id_ << std::endl;
 
-        if (rob_04_attached_id_ != -1)
-        {
+        // if (rob_04_attached_id_ != -1)
+        // {
+        //     is_rob_04_attached_ = true;
+        // }
+
+        rob_04_attached_orient_ = cur_orient;
+
+        // tell sim objects (fabric) to attach robot to the nearest particles within radius
+        fabric_.attachNearestWithRadius(pos, robot_attach_radius_, rob_04_attached_ids_, rob_04_attached_rel_poses_);
+
+        if (!rob_04_attached_ids_.empty()){
             is_rob_04_attached_ = true;
+            rob_04_attached_id_ = rob_04_attached_ids_[0];
         }
     }
     else
     {
         // tell sim object to update its position
-            fabric_.updateAttachedPose(rob_04_attached_id_, pos);
+        // fabric_.updateAttachedPose(rob_04_attached_id_, pos);
+
+        fabric_.updateAttachedPoses(rob_04_attached_ids_, pos, rob_04_attached_rel_poses_, cur_orient, rob_04_attached_orient_);
     }
 }
 

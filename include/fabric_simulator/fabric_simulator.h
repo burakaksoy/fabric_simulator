@@ -176,6 +176,8 @@ private:
     
     Real fabric_rob_z_offset_; // Additional  attachment height to robots
 
+    Real robot_attach_radius_;
+
     // Other variables
     Eigen::Matrix<Real,1,3> gravity_;
 
@@ -190,6 +192,21 @@ private:
     int rob_02_attached_id_;
     int rob_03_attached_id_;
     int rob_04_attached_id_;
+
+    std::vector<int> rob_01_attached_ids_;
+    std::vector<int> rob_02_attached_ids_;
+    std::vector<int> rob_03_attached_ids_;
+    std::vector<int> rob_04_attached_ids_;
+
+    std::vector<Eigen::Matrix<Real,1,3>> rob_01_attached_rel_poses_;
+    std::vector<Eigen::Matrix<Real,1,3>> rob_02_attached_rel_poses_;
+    std::vector<Eigen::Matrix<Real,1,3>> rob_03_attached_rel_poses_;
+    std::vector<Eigen::Matrix<Real,1,3>> rob_04_attached_rel_poses_;
+
+    Eigen::Quaternion<Real> rob_01_attached_orient_;
+    Eigen::Quaternion<Real> rob_02_attached_orient_;
+    Eigen::Quaternion<Real> rob_03_attached_orient_;
+    Eigen::Quaternion<Real> rob_04_attached_orient_;
 
     Eigen::Matrix<Real,1,3> rob_01_attached_force_;
     Eigen::Matrix<Real,1,3> rob_02_attached_force_;

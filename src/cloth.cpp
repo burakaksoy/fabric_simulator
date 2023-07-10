@@ -211,7 +211,8 @@ Eigen::RowVectorXi Cloth::findTriNeighbors(const Eigen::MatrixX3i &face_tri_ids)
 
 
 // Find the nearest 3D position vector row id in the given matrix
-int Cloth::findNearestPositionVectorId(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic>& matrix, const Eigen::Matrix<Real,3,1>& pos) {
+int Cloth::findNearestPositionVectorId(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic>& matrix, 
+                                       const Eigen::Matrix<Real,3,1>& pos) {
   int nearestId = -1;
   Real minDistance = std::numeric_limits<Real>::max();
   for (int i = 0; i < matrix.rows(); ++i) {
@@ -223,6 +224,26 @@ int Cloth::findNearestPositionVectorId(const Eigen::Matrix<Real,Eigen::Dynamic,E
     }
   }
   return nearestId;
+}
+
+void Cloth::findPositionVectorsAndIdsInSphere(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic> &particlePoses, 
+                                       const Real &radius, 
+                                       std::vector<int> &ids, 
+                                       std::vector<Eigen::Matrix<Real,1,3>> &rel_poses) {
+    const int first_id = ids[0];
+    const Eigen::Matrix<Real,3,1> center = particlePoses.row(first_id);
+
+    for (int i = 0; i < particlePoses.rows(); ++i) {
+        if (i != first_id){
+            Eigen::Matrix<Real,3,1> currentPos = particlePoses.row(i).transpose();
+            Eigen::Matrix<Real,1,3> relPos = (currentPos - center); 
+            Real currentDistance = relPos.norm();
+            if (currentDistance < radius) {
+                ids.push_back(i);
+                rel_poses.push_back(relPos);
+            }
+        }
+    }
 }
 
 void Cloth::solveStretching(const Real &compliance, const Real &dt){
@@ -386,8 +407,10 @@ void Cloth::hangFromCorners(const int &num_corners){
 void Cloth::setStaticParticles(const std::vector<int> &particles){
     for (const int& i : particles)
     {
-        inv_mass_(i) = 0.0;
-        attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector               
+        if (inv_mass_(i) != 0.0){
+            inv_mass_(i) = 0.0;
+            attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector               
+        }
     }
 }
 
@@ -465,6 +488,50 @@ int Cloth::attachNearest(const Eigen::Matrix<Real,1,3> &pos){
 
 void Cloth::updateAttachedPose(const int &id, const Eigen::Matrix<Real,1,3> &pos){
     pos_.row(id) = pos;
+}
+
+
+void Cloth::attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+                                    std::vector<int> &ids,
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses){
+    // Attaches the particles that is inside a sphere defined with radius r parallel with center pos
+    // Edits:
+    // std::vector<int> ids;
+    // std::vector<Eigen::Matrix<Real,1,3>> rel_poses; 
+
+    int id = findNearestPositionVectorId(pos_,pos);
+    if (id != -1)
+    {
+        ids.push_back(id);
+        rel_poses.push_back(Eigen::Matrix<Real,1,3>(0.0, 0.0, 0.0));
+
+        // if (r <= 0), Only attach the nearest to given pose
+        if (r > 0){ // Attach all within the specified circle
+            // Find all the ids within the radius and their relative poses
+            findPositionVectorsAndIdsInSphere(pos_, r, ids, rel_poses);
+        }
+
+        // Now make these particles static
+        setStaticParticles(ids);
+    }
+}
+
+void Cloth::updateAttachedPoses(const std::vector<int> &ids,
+                                const Eigen::Matrix<Real,1,3> &pos,
+                                const std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                const Eigen::Quaternion<Real> &cur_orient,
+                                const Eigen::Quaternion<Real> &init_orient){
+    // ids: 
+    // pos: new pose of the first id
+    // rel_poses: 
+    
+    Eigen::Matrix<Real,3,3> R_cur  =  cur_orient.normalized().toRotationMatrix();
+    Eigen::Matrix<Real,3,3> R_init = init_orient.normalized().toRotationMatrix();
+    Eigen::Matrix<Real,3,3> R_ic = R_init.transpose()*R_cur; // init to current
+
+    for (int i = 0; i < ids.size(); ++i) {
+        updateAttachedPose(ids[i], pos+(R_ic*rel_poses[i].transpose()).transpose());
+    }
 }
 
 Eigen::Matrix<Real,Eigen::Dynamic,3> *Cloth::getPosPtr(){

@@ -10,7 +10,7 @@
 #include <numeric>
 #include <vector>
 #include <unordered_map> 
-#include <algorithm>    // std::sort
+#include <algorithm>    // std::sort, std::find
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -64,6 +64,16 @@ public:
     int attachNearest(const Eigen::Matrix<Real,1,3> &pos);
     void updateAttachedPose(const int &id, const Eigen::Matrix<Real,1,3> &pos);
 
+    void attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+                                    std::vector<int> &ids,
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses);
+
+    void updateAttachedPoses(const std::vector<int> &ids,
+                                const Eigen::Matrix<Real,1,3> &pos,
+                                const std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                const Eigen::Quaternion<Real> &cur_orient,
+                                const Eigen::Quaternion<Real> &init_orient);
+
     Eigen::MatrixX2i *getStretchingIdsPtr();
     Eigen::MatrixX4i *getBendingIdsPtr();
 
@@ -84,6 +94,12 @@ private:
     Eigen::RowVectorXi findTriNeighbors(const Eigen::MatrixX3i &face_tri_ids);
 
     int findNearestPositionVectorId(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic>& matrix, const Eigen::Matrix<Real,3,1>& pos);
+
+    void findPositionVectorsAndIdsInSphere(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic> &particlePoses, 
+                                       const Real &radius, 
+                                       std::vector<int> &ids, 
+                                       std::vector<Eigen::Matrix<Real,1,3>> &rel_poses);
+
     void solveStretching(const Real &compliance, const Real &dt);
     void solveBending(const Real &compliance, const Real &dt);
 
