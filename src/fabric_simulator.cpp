@@ -87,6 +87,8 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("num_hang_corners");
     nh_local_.deleteParam("custom_static_particles");
 
+    nh_local_.deleteParam("custom_static_particles_odom_topic_prefix");
+
     nh_local_.deleteParam("global_damp_coeff_v");
 
     nh_local_.deleteParam("simulation_rate");
@@ -95,6 +97,8 @@ FabricSimulator::~FabricSimulator() {
 
     nh_local_.deleteParam("fabric_points_topic_name");
     nh_local_.deleteParam("fabric_points_frame_id");
+
+    nh_local_.deleteParam("face_tri_ids_topic_name");
     
     nh_local_.deleteParam("odom_01_topic_name");
     nh_local_.deleteParam("odom_02_topic_name");
@@ -154,6 +158,8 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<int>("num_hang_corners", num_hang_corners_, 0);
     nh_local_.param("custom_static_particles", custom_static_particles_, std::vector<int>());
 
+    nh_local_.param<std::string>("custom_static_particles_odom_topic_prefix", custom_static_particles_odom_topic_prefix_, std::string("custom_static_particles_odom_"));
+
     nh_local_.param<Real>("global_damp_coeff_v", global_damp_coeff_v_, 0.0);
     
     nh_local_.param<Real>("simulation_rate", simulation_rate_, 90.0); //90
@@ -163,6 +169,8 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
     nh_local_.param<std::string>("fabric_points_topic_name", fabric_points_topic_name_, std::string("cloth_points"));
     nh_local_.param<std::string>("fabric_points_frame_id", fabric_points_frame_id_, std::string("map"));
+
+    nh_local_.param<std::string>("face_tri_ids_topic_name", face_tri_ids_topic_name_, std::string("face_tri_ids"));
 
     nh_local_.param<std::string>("odom_01_topic_name", odom_01_topic_name_, std::string("d1/ground_truth/fabric_mount/odom"));
     nh_local_.param<std::string>("odom_02_topic_name", odom_02_topic_name_, std::string("d2/ground_truth/fabric_mount/odom"));
@@ -238,8 +246,20 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             sub_odom_03_ = nh_.subscribe(odom_03_topic_name_, 1, &FabricSimulator::odometryCb_03, this);
             sub_odom_04_ = nh_.subscribe(odom_04_topic_name_, 1, &FabricSimulator::odometryCb_04, this);
 
+            // Create a subscriber for each custom static particle 
+            for (const int& particle_id : custom_static_particles_) {
+                std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
+                ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
+                                                                        [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) { 
+                                                                            this->odometryCb_custom_static_particles(odom_msg, particle_id); }
+                                                                        );
+                custom_static_particles_odom_subscribers_.push_back(sub);
+            }
+
             // Create publishers
             pub_fabric_points_ = nh_.advertise<visualization_msgs::Marker>(fabric_points_topic_name_, 1);
+
+            pub_face_tri_ids_ = nh_.advertise<std_msgs::Int32MultiArray>(face_tri_ids_topic_name_, 1);
 
             pub_wrench_stamped_01_ = nh_.advertise<geometry_msgs::WrenchStamped>(wrench_01_topic_name_, 1);
             pub_wrench_stamped_02_ = nh_.advertise<geometry_msgs::WrenchStamped>(wrench_02_topic_name_, 1);
@@ -259,11 +279,17 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             // Stop publishers
             pub_fabric_points_.shutdown();
 
+            pub_face_tri_ids_.shutdown();
+
             // Stop subscribers
             sub_odom_01_.shutdown();
             sub_odom_02_.shutdown();
             sub_odom_03_.shutdown();
             sub_odom_04_.shutdown();
+
+            for(ros::Subscriber& subscriber : custom_static_particles_odom_subscribers_) {
+                subscriber.shutdown();
+            }
 
             // Stop publishers
             pub_wrench_stamped_01_.shutdown();
@@ -586,6 +612,10 @@ void FabricSimulator::render(const ros::TimerEvent& e){
     Eigen::MatrixX2i *stretching_ids_ptr = fabric_.getStretchingIdsPtr();
     drawRviz(pos_ptr);
     drawRvizWireframe(pos_ptr,stretching_ids_ptr);
+
+    // Also publish mesh.face_tri_ids here:
+    Eigen::MatrixX3i *face_tri_ids_ptr = fabric_.getFaceTriIdsPtr();
+    publishFaceTriIds(face_tri_ids_ptr);
 }
 
 void FabricSimulator::drawRviz(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses){
@@ -676,6 +706,40 @@ void FabricSimulator::publishRvizLines(const std::vector<geometry_msgs::Point> &
     m.color.b = 0.;
 
     pub_fabric_points_.publish(m);
+}
+
+void FabricSimulator::publishFaceTriIds(const Eigen::MatrixX3i *ids){
+    std_msgs::Int32MultiArray array;
+
+    for (int i = 0; i < ids->rows(); i++) {
+        int id0 = (*ids)(i, 0);
+        int id1 = (*ids)(i, 1);
+        int id2 = (*ids)(i, 2);
+
+        // Append the ids to the array
+        array.data.push_back(id0);
+        array.data.push_back(id1);
+        array.data.push_back(id2);
+    }
+
+    // Publish the array
+    pub_face_tri_ids_.publish(array);
+}
+
+void FabricSimulator::odometryCb_custom_static_particles(const nav_msgs::Odometry::ConstPtr& odom_msg, const int& id) {
+    const Real x = odom_msg->pose.pose.position.x;
+    const Real y = odom_msg->pose.pose.position.y;
+    const Real z = odom_msg->pose.pose.position.z + fabric_rob_z_offset_;
+
+    const Real qw = odom_msg->pose.pose.orientation.w;
+    const Real qx = odom_msg->pose.pose.orientation.x;
+    const Real qy = odom_msg->pose.pose.orientation.y;
+    const Real qz = odom_msg->pose.pose.orientation.z;
+    
+    Eigen::Matrix<Real,3,1> pos(x, y, z);
+    Eigen::Quaternion<Real> ori(qw,qx,qy,qz);
+
+    fabric_.updateAttachedPose(id, pos);
 }
 
 void FabricSimulator::odometryCb_01(const nav_msgs::Odometry::ConstPtr odom_msg){

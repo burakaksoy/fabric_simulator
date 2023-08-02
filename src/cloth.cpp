@@ -562,6 +562,10 @@ Eigen::MatrixX4i *Cloth::getBendingIdsPtr(){
     return &bending_ids_;
 }
 
+Eigen::MatrixX3i *Cloth::getFaceTriIdsPtr(){
+    return &mesh_.face_tri_ids;
+}
+
 std::vector<int> *Cloth::getAttachedIdsPtr(){
     return &attached_ids_;
 }

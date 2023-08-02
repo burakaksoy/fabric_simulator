@@ -77,6 +77,8 @@ public:
     Eigen::MatrixX2i *getStretchingIdsPtr();
     Eigen::MatrixX4i *getBendingIdsPtr();
 
+    Eigen::MatrixX3i *getFaceTriIdsPtr();
+
     Eigen::Matrix<Real,1,Eigen::Dynamic> *getStretchingLengthsPtr();
     Eigen::Matrix<Real,1,Eigen::Dynamic> *getBendingLengthsPtr();
 

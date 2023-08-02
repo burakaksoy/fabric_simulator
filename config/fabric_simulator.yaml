@@ -8,8 +8,8 @@ set_sim_rate_auto: false  # to set the simulation rate and dt automaticall, do n
 num_substeps: 3 # Number of substeps per iteration based on 2019 Small Steps XPBD paper.
 num_steps: 1 # experimental only. do not change from 1
 
-# fabric_mesh_path: "" # .obj file, If empty, a rectangular fabric will be generated from the fabric sizes below
-fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_716262.obj
+fabric_mesh_path: "" # .obj file, If empty, a rectangular fabric will be generated from the fabric sizes below
+# fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_716262.obj
 # fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_717405.obj
 # fabric_mesh_path: $(find fabric_simulator)/mesh/MESH_717167.obj
 # fabric_mesh_path: $(find fabric_simulator)/mesh/MESH_717651.obj
@@ -33,23 +33,34 @@ fabric_scale: [1, 1, 1]
 
 # If fabric_mesh_path is not empty string (i.e., "") num_hang_corners is NOT used.
 # Also, for some rotations specified this may NOT work.
-num_hang_corners: 4 # num of corners to hang fabric from (options: 0,1,2,3,4)
+num_hang_corners: 0 # num of corners to hang fabric from (options: 0,1,2,3,4)
 
-custom_static_particles: [363,289,428,202] # specify the particle ids to set as static
+custom_static_particles: [0,30,929,960] # specify the particle ids to set as static
+# Note: we also create an odom subscriber for each custom static particle to update their poses online.
+
+# custom_static_particles: [363,289,428,202] # specify the particle ids to set as static
 # custom_static_particles: [472,400,558] # specify the particle ids to set as static
 # custom_static_particles: [680,345,326] # specify the particle ids to set as static
 # custom_static_particles: [404,225,102,521] # specify the particle ids to set as static
+
+custom_static_particles_odom_topic_prefix: "custom_static_particles_odom_"
+# Note: The topics names will include the id number in the end. 
+# For example, for custom_static_particles_odom_topic_prefix: "custom_static_particles_odom_"
+# and custom_static_particles: [0,27], we will have two odom subscriber topics named:
+# "custom_static_particles_odom_0" and "custom_static_particles_odom_27"
 
 # Global artificial velocity damping coefficients. Defaults to 0.0. 
 global_damp_coeff_v: 0.0 # 7.1e-1 # 2.1e-4; // 0.9e-3
 
 simulation_rate: 1000.0
-rendering_rate: 30.0 # Hz, frequency to publish the fabric vertices and edges to RVIZ visualization markers
+rendering_rate: 50.0 # Hz, frequency to publish the fabric vertices and edges to RVIZ visualization markers
 
 wrench_pub_rate: 100.0 # Hz, frequency to publish the fabric forces at the attachment points
 
 fabric_points_topic_name: "cloth_points" # topic name to publish the RVIZ visualization marker msgs
 fabric_points_frame_id: "map" # the reference tf frame ID that the visualization marker msgs are published in.
+
+face_tri_ids_topic_name: "face_tri_ids"
 
 # Odometry topics that publishes robot positions to the fabric simulator
 odom_01_topic_name: "d1/ground_truth/fabric_mount/odom"

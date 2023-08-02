@@ -10,6 +10,7 @@
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/WrenchStamped.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Int32MultiArray.h>
 #include <nav_msgs/Odometry.h>
 
 #include <std_srvs/Empty.h>
@@ -67,6 +68,8 @@ private:
     void publishRvizPoints(const std::vector<geometry_msgs::Point> &points);
     void publishRvizLines(const std::vector<geometry_msgs::Point> &points);
 
+    void publishFaceTriIds(const Eigen::MatrixX3i *ids);
+
     // Creates the markers to publish
     // void drawRviz(const Eigen::Matrix<Real,Eigen::Dynamic,3> &poses);
     // void drawRvizWireframe(const Eigen::Matrix<Real,Eigen::Dynamic,3> &poses, const Eigen::MatrixX2i &ids);
@@ -85,6 +88,8 @@ private:
     void odometryCb_03(const nav_msgs::Odometry::ConstPtr odom_msg);
     void odometryCb_04(const nav_msgs::Odometry::ConstPtr odom_msg);
 
+    void odometryCb_custom_static_particles(const nav_msgs::Odometry::ConstPtr& odom_msg, const int& id);
+
     // Service functions
     //   void initialize() { std_srvs::Empty empt; updateParams(empt.request, empt.response); }
     bool updateParams(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
@@ -98,6 +103,8 @@ private:
 
     ros::Publisher pub_fabric_points_;
 
+    ros::Publisher pub_face_tri_ids_;
+
     ros::Publisher pub_wrench_stamped_01_;
     ros::Publisher pub_wrench_stamped_02_;
     ros::Publisher pub_wrench_stamped_03_;
@@ -109,6 +116,9 @@ private:
     ros::Subscriber sub_odom_02_;
     ros::Subscriber sub_odom_03_;
     ros::Subscriber sub_odom_04_;
+
+    // Define the vector of subscribers
+    std::vector<ros::Subscriber> custom_static_particles_odom_subscribers_;
 
     ros::Timer timer_render_;
     ros::Timer timer_simulate_;
@@ -149,6 +159,8 @@ private:
     int num_hang_corners_; // num of corners to hang fabric from (options: 0,1,2,3,4)
     std::vector<int> custom_static_particles_; // particle ids to set as static
 
+    std::string custom_static_particles_odom_topic_prefix_;
+
     Real global_damp_coeff_v_; 
     
     Real simulation_rate_;
@@ -158,6 +170,8 @@ private:
 
     std::string fabric_points_topic_name_;
     std::string fabric_points_frame_id_;
+
+    std::string face_tri_ids_topic_name_;
 
     std::string odom_01_topic_name_;
     std::string odom_02_topic_name_; 
