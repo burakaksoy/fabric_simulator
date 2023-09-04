@@ -62,6 +62,25 @@ fabric_points_frame_id: "map" # the reference tf frame ID that the visualization
 
 face_tri_ids_topic_name: "face_tri_ids"
 
+point_marker_scale: 0.015
+
+point_marker_color_r: 1.0
+point_marker_color_g: 0.5
+point_marker_color_b: 1.0
+point_marker_color_a: 1.0
+
+line_marker_scale_multiplier: 1.0
+
+line_marker_color_r: 0.0
+line_marker_color_g: 1.0
+line_marker_color_b: 0.0
+line_marker_color_a: 0.0
+
+mesh_marker_color_r: 0.25
+mesh_marker_color_g: 0.5
+mesh_marker_color_b: 0.5
+mesh_marker_color_a: 0.6
+
 # Odometry topics that publishes robot positions to the fabric simulator
 odom_01_topic_name: "d1/ground_truth/fabric_mount/odom"
 odom_02_topic_name: "d2/ground_truth/fabric_mount/odom"

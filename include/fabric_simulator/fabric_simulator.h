@@ -67,6 +67,7 @@ private:
     // Helper functions to publish created markers
     void publishRvizPoints(const std::vector<geometry_msgs::Point> &points);
     void publishRvizLines(const std::vector<geometry_msgs::Point> &points);
+    void publishRvizTriangles(const std::vector<geometry_msgs::Point> &points);
 
     void publishFaceTriIds(const Eigen::MatrixX3i *ids);
 
@@ -75,6 +76,7 @@ private:
     // void drawRvizWireframe(const Eigen::Matrix<Real,Eigen::Dynamic,3> &poses, const Eigen::MatrixX2i &ids);
     void drawRviz(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses);
     void drawRvizWireframe(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX2i *ids);
+    void drawRvizMesh(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX3i *face_tri_ids_ptr);
 
     // Timer callback functions
     void simulate(const ros::TimerEvent& e);
@@ -191,6 +193,25 @@ private:
     Real fabric_rob_z_offset_; // Additional  attachment height to robots
 
     Real robot_attach_radius_;
+
+    Real point_marker_scale_;
+
+    Real point_marker_color_r_;
+    Real point_marker_color_g_;
+    Real point_marker_color_b_;
+    Real point_marker_color_a_;
+
+    Real line_marker_scale_multiplier_;
+
+    Real line_marker_color_r_;
+    Real line_marker_color_g_;
+    Real line_marker_color_b_;
+    Real line_marker_color_a_;
+
+    Real mesh_marker_color_r_;
+    Real mesh_marker_color_g_;
+    Real mesh_marker_color_b_;
+    Real mesh_marker_color_a_;
 
     // Other variables
     Eigen::Matrix<Real,1,3> gravity_;

@@ -118,6 +118,26 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("fabric_rob_z_offset");
 
     nh_local_.deleteParam("robot_attach_radius");
+
+    nh_local_.deleteParam("point_marker_scale");
+
+    nh_local_.deleteParam("point_marker_color_r");
+    nh_local_.deleteParam("point_marker_color_g");
+    nh_local_.deleteParam("point_marker_color_b");
+    nh_local_.deleteParam("point_marker_color_a");
+
+    nh_local_.deleteParam("line_marker_scale_multiplier");
+    
+    nh_local_.deleteParam("line_marker_color_r");
+    nh_local_.deleteParam("line_marker_color_g");
+    nh_local_.deleteParam("line_marker_color_b");
+    nh_local_.deleteParam("line_marker_color_a");
+
+    nh_local_.deleteParam("mesh_marker_color_r");
+    nh_local_.deleteParam("mesh_marker_color_g");
+    nh_local_.deleteParam("mesh_marker_color_b");
+    nh_local_.deleteParam("mesh_marker_color_a");
+
 }
 
 bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
@@ -190,6 +210,26 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<Real>("fabric_rob_z_offset", fabric_rob_z_offset_, 0.0); // 0.785145); // makes it 80cm above ground
 
     nh_local_.param<Real>("robot_attach_radius", robot_attach_radius_, 0.0);
+
+
+    nh_local_.param<Real>("point_marker_scale",   point_marker_scale_,   0.015);
+
+    nh_local_.param<Real>("point_marker_color_r", point_marker_color_r_, 1.0);
+    nh_local_.param<Real>("point_marker_color_g", point_marker_color_g_, 0.5);
+    nh_local_.param<Real>("point_marker_color_b", point_marker_color_b_, 0.0);
+    nh_local_.param<Real>("point_marker_color_a", point_marker_color_a_, 1.0);
+
+    nh_local_.param<Real>("line_marker_scale_multiplier", line_marker_scale_multiplier_, 1.0);
+    
+    nh_local_.param<Real>("line_marker_color_r",  line_marker_color_r_,  0.0);
+    nh_local_.param<Real>("line_marker_color_g",  line_marker_color_g_,  1.0);
+    nh_local_.param<Real>("line_marker_color_b",  line_marker_color_b_,  0.0);
+    nh_local_.param<Real>("line_marker_color_a",  line_marker_color_a_,  1.0);
+
+    nh_local_.param<Real>("mesh_marker_color_r",  mesh_marker_color_r_,  0.2);
+    nh_local_.param<Real>("mesh_marker_color_g",  mesh_marker_color_g_,  0.5);
+    nh_local_.param<Real>("mesh_marker_color_b",  mesh_marker_color_b_,  0.5);
+    nh_local_.param<Real>("mesh_marker_color_a",  mesh_marker_color_a_,  0.7);
 
     // Set timer periods based on the parameters
     timer_render_.setPeriod(ros::Duration(1.0/rendering_rate_));
@@ -616,6 +656,8 @@ void FabricSimulator::render(const ros::TimerEvent& e){
     // Also publish mesh.face_tri_ids here:
     Eigen::MatrixX3i *face_tri_ids_ptr = fabric_.getFaceTriIdsPtr();
     publishFaceTriIds(face_tri_ids_ptr);
+
+    drawRvizMesh(pos_ptr, face_tri_ids_ptr);
 }
 
 void FabricSimulator::drawRviz(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses){
@@ -657,6 +699,41 @@ void FabricSimulator::drawRvizWireframe(const Eigen::Matrix<Real,Eigen::Dynamic,
     publishRvizLines(clothRVIZEdges);
 }
 
+void FabricSimulator::drawRvizMesh(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX3i *face_tri_ids_ptr){
+    std::vector<geometry_msgs::Point> clothRVIZTriangles;
+
+    for (int i = 0; i < face_tri_ids_ptr->rows(); i++) {
+        int id0 = (*face_tri_ids_ptr)(i, 0);
+        int id1 = (*face_tri_ids_ptr)(i, 1);
+        int id2 = (*face_tri_ids_ptr)(i, 2);
+
+        // Switch id1 and id2 here to fix wrong direction of color of mesh
+        std::swap(id1, id2);
+
+        geometry_msgs::Point p0;
+        p0.x = (*poses)(id0, 0);
+        p0.y = (*poses)(id0, 1);
+        p0.z = (*poses)(id0, 2);
+        clothRVIZTriangles.push_back(p0);
+
+        geometry_msgs::Point p1;
+        p1.x = (*poses)(id1, 0);
+        p1.y = (*poses)(id1, 1);
+        p1.z = (*poses)(id1, 2);
+        clothRVIZTriangles.push_back(p1);
+
+        geometry_msgs::Point p2;
+        p2.x = (*poses)(id2, 0);
+        p2.y = (*poses)(id2, 1);
+        p2.z = (*poses)(id2, 2);
+        clothRVIZTriangles.push_back(p2);
+    }
+
+    publishRvizTriangles(clothRVIZTriangles);
+}
+
+
+
 void FabricSimulator::publishRvizPoints(const std::vector<geometry_msgs::Point> &points){
     visualization_msgs::Marker m;
 
@@ -671,14 +748,14 @@ void FabricSimulator::publishRvizPoints(const std::vector<geometry_msgs::Point> 
 
     m.points = points;
 
-    m.scale.x = 0.01;
-    m.scale.y = 0.01;
-    m.scale.z = 0.01;
+    m.scale.x = point_marker_scale_;
+    m.scale.y = point_marker_scale_;
+    m.scale.z = point_marker_scale_;
 
-    m.color.a = 1.;
-    m.color.r = 1.;
-    m.color.g = 0.5;
-    m.color.b = 0.;
+    m.color.r = point_marker_color_r_;
+    m.color.g = point_marker_color_g_;
+    m.color.b = point_marker_color_b_;
+    m.color.a = point_marker_color_a_;
 
     pub_fabric_points_.publish(m);
 }
@@ -698,15 +775,43 @@ void FabricSimulator::publishRvizLines(const std::vector<geometry_msgs::Point> &
     m.points = points;
 
     // LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
-    m.scale.x = 0.005;
+    m.scale.x = 0.005*line_marker_scale_multiplier_;
 
-    m.color.a = 1.;
-    m.color.r = 0.;
-    m.color.g = 1.0;
-    m.color.b = 0.;
+    m.color.r = line_marker_color_r_;
+    m.color.g = line_marker_color_g_;
+    m.color.b = line_marker_color_b_;
+    m.color.a = line_marker_color_a_;
+
 
     pub_fabric_points_.publish(m);
 }
+
+void FabricSimulator::publishRvizTriangles(const std::vector<geometry_msgs::Point> &points){
+    visualization_msgs::Marker m;
+
+    m.header.frame_id = fabric_points_frame_id_;
+    m.header.stamp = ros::Time::now();
+
+    m.type = visualization_msgs::Marker::TRIANGLE_LIST;
+    m.id = 2;  // Change to an unused id
+    m.action = visualization_msgs::Marker::ADD;
+
+    m.pose.orientation.w = 1.0;
+
+    m.points = points;
+
+    m.scale.x = 1.0; // As it's a list of triangles, scale shouldn't matter
+    m.scale.y = 1.0;
+    m.scale.z = 1.0;
+
+    m.color.r = mesh_marker_color_r_; 
+    m.color.g = mesh_marker_color_g_;
+    m.color.b = mesh_marker_color_b_;
+    m.color.a = mesh_marker_color_a_;
+
+    pub_fabric_points_.publish(m);  
+}
+
 
 void FabricSimulator::publishFaceTriIds(const Eigen::MatrixX3i *ids){
     std_msgs::Int32MultiArray array;
