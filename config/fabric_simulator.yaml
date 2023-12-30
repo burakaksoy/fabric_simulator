@@ -5,39 +5,55 @@ gravity_z: -9.81 # m/s^2
 
 dt: 0.003 # seconds. Simulated time per iteration of the fabric simulatiob.
 set_sim_rate_auto: false  # to set the simulation rate and dt automaticall, do not use
-num_substeps: 3 # Number of substeps per iteration based on 2019 Small Steps XPBD paper.
+num_substeps: 5 # Number of substeps per iteration based on 2019 Small Steps XPBD paper.
 num_steps: 1 # experimental only. do not change from 1
 
+is_collision_handling_enabled: true # To disable the collision handling feature, default: true
+
 fabric_mesh_path: "" # .obj file, If empty, a rectangular fabric will be generated from the fabric sizes below
-# fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_716262.obj
-# fabric_mesh_path: $(find fabric_simulator)/mesh/VINYL_717405.obj
-# fabric_mesh_path: $(find fabric_simulator)/mesh/MESH_717167.obj
-# fabric_mesh_path: $(find fabric_simulator)/mesh/MESH_717651.obj
+# fabric_mesh_path: $(find fabric_simulator)/data/mesh/VINYL_716262.obj
+# fabric_mesh_path: $(find fabric_simulator)/data/mesh/VINYL_717405.obj
+# fabric_mesh_path: $(find fabric_simulator)/data/mesh/MESH_717167.obj
+# fabric_mesh_path: $(find fabric_simulator)/data/mesh/MESH_717651.obj
 
 # If fabric_mesh_path is not empty string (i.e., "") the following parameters are not used.
-fabric_x: 2.0 # fabric x size in meters
-fabric_y: 2.0 # fabric y size in meters
+fabric_x: 2.0 # 1.5 # fabric x size in meters
+fabric_y: 2.0 # 1.0 # fabric y size in meters
 fabric_resolution: 15 # particle resolution per meter 
 
 fabric_density: 1.0 # fabric mass per meter square (kg/m^2)
 
-fabric_stretching_compliance: 1.0e-9  # 0.0
-fabric_bending_compliance: 1.0e-3 # Note, fabric stretching compliance assumed to be 0.0 already.
+fabric_stretching_compliance: 1.0e-4 # 1.0e-4 # 1.0e-9 # 0.0
+fabric_bending_compliance: 1.0e-2 # 2.0e-1 # 1.0e-7 # Note, fabric stretching compliance assumed to be 0.0 already.
+
+contact_tolerance: 0.1 # m, It's like offset around the obstacle object for aabb checking. default: 0.1
+contact_sdf_domain_offset: 2.0 # m, defines the minimum distance to a rigid body that will start contact checking and reporting minimum distance readings
 
 # Fabric Initial Transformations
 # initial_height: 0.0 # initial fabric height from ground (m) (Deprecated, use fabric_translation instead)
-fabric_translation: [0, 0, 0.8]
-fabric_rotationAxis: [0, 0, 1]
-fabric_rotationAngle: 0.0
+fabric_translation: [0, 0, 1.7]
+fabric_rotationAxis: [0, 1, 0]
+fabric_rotationAngle: 0.0 # 1.4 # Radians
 fabric_scale: [1, 1, 1]
 
 # If fabric_mesh_path is not empty string (i.e., "") num_hang_corners is NOT used.
 # Also, for some rotations specified this may NOT work.
 num_hang_corners: 0 # num of corners to hang fabric from (options: 0,1,2,3,4)
 
-custom_static_particles: [0,30,929,960] # specify the particle ids to set as static
+custom_static_particles: [] # specify the particle ids to set as static
 # Note: we also create an odom subscriber for each custom static particle to update their poses online.
 
+## Fabric Corners for 2.0x2.0-15 resolution mesh 
+# custom_static_particles: [0,30,930,960] # specify the particle ids to set as static
+# custom_static_particles: [0,30] # specify the particle ids to set as static
+# custom_static_particles: [930,960] # specify the particle ids to set as static
+
+##  Fabric Corners for 1.5x1.0-15 resolution mesh 
+# custom_static_particles: [  0,15,352,367] # specify the particle ids to set as static
+# custom_static_particles: [0,15] # specify the particle ids to set as static
+# custom_static_particles: [352,367] # specify the particle ids to set as static
+
+## Fabric Corners (Holding Points) for VINYL and MESH.obj files as fabric
 # custom_static_particles: [363,289,428,202] # specify the particle ids to set as static
 # custom_static_particles: [472,400,558] # specify the particle ids to set as static
 # custom_static_particles: [680,345,326] # specify the particle ids to set as static
@@ -52,34 +68,55 @@ custom_static_particles_odom_topic_prefix: "custom_static_particles_odom_"
 # Global artificial velocity damping coefficients. Defaults to 0.0. 
 global_damp_coeff_v: 0.0 # 7.1e-1 # 2.1e-4; // 0.9e-3
 
-simulation_rate: 1000.0
-rendering_rate: 50.0 # Hz, frequency to publish the fabric vertices and edges to RVIZ visualization markers
+simulation_rate: 1000.0 #1000.0
+rendering_rate: 30.0 # Hz, frequency to publish the fabric vertices, edges and triangle mesh to RVIZ visualization markers
 
 wrench_pub_rate: 100.0 # Hz, frequency to publish the fabric forces at the attachment points
+rendering_rb_rate: 2 # Hz, frequency to publish the rigid body meshes to RVIZ visualization markers
+min_dist_to_rb_pub_rate: 50.0 # Hz, frequency to publish minimum distances to the rigid bodies 
 
+# Rigid body scene .json file, If empty, no rigid bodies exist in the simulator
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrel.json 
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCylinderUnitBox.json
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnFloor.json
+rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCube_5.json
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCube_5_edit.json
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnSphere.json
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnRollers.json
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnBunny.json
+
+# FABRIC VISUALIZATION RELATED PARAMETERS
 fabric_points_topic_name: "cloth_points" # topic name to publish the RVIZ visualization marker msgs
 fabric_points_frame_id: "map" # the reference tf frame ID that the visualization marker msgs are published in.
-
-face_tri_ids_topic_name: "face_tri_ids"
-
+fabric_visualization_mode: 4 # 0: Points Only, 1: Wireframe Only, 2: Mesh Only, 3: Points and Wireframe, 4: All
+# Note that using less data in the visualization helps to save network bandwith
 point_marker_scale: 0.015
+point_marker_color_rgba: [1.0, 0.5, 1.0, 1.0]
+line_marker_scale_multiplier: 1.0 # multiplies 5 mm with this scale
+line_marker_color_rgba: [0.0, 1.0, 0.0, 0.1]
+mesh_marker_color_rgba: [0.25, 0.5, 0.5, 0.6]
 
-point_marker_color_r: 1.0
-point_marker_color_g: 0.5
-point_marker_color_b: 1.0
-point_marker_color_a: 1.0
+face_tri_ids_topic_name: "face_tri_ids" # NOT for visualization, it's like a helper state publisher of the fabric
 
-line_marker_scale_multiplier: 1.0
+# RIGID BODY VISUALIZATION RELATED PARAMETERS
+rb_markers_topic_name: "rigid_body_markers" # topic name to publish the RVIZ visualization marker array msgs of the rigid bodies in the scene
+rb_visualization_mode: 2 # 0: Mesh Only, 1: Wireframe Only, 2: Both
+# Note that using less data in the visualization helps to save network bandwith
+# for the rigid bodies in the scene, we assume the same frame id as the fabric
+# and we are only publishing the wireframe lines and the mesh (i.e no vertex points)
+rb_line_marker_scale_multiplier: 1.0 # multiplies 5 mm with this scale
+rb_line_marker_color_rgba: [0.5, 1.0, 0.5, 0.1]
+rb_mesh_marker_color_rgba: [0.0, 0.0, 0.0, 0.5]
 
-line_marker_color_r: 0.0
-line_marker_color_g: 1.0
-line_marker_color_b: 0.0
-line_marker_color_a: 0.0
+# MINIMUM DISTANCE VISUALIZATION RELATED PARAMETERS
+# Published topic name of the minimum distances to the rigid bodies
+min_dist_to_rb_topic_name: "min_dist_to_rigid_bodies" # DISTANCES TOPIC
+# topic name to publish the RVIZ visualization marker msgs
+min_dist_markers_topic_name: "min_dist_markers" # DISTANCES "VISUALIZATION" TOPIC 
+visualize_min_distances: true
+min_dist_line_marker_scale_multiplier: 4.0 # multiplies 5 mm with this scale
+min_dist_line_marker_color_rgba: [1.0, 0.0, 0.0, 1.0]
 
-mesh_marker_color_r: 0.25
-mesh_marker_color_g: 0.5
-mesh_marker_color_b: 0.5
-mesh_marker_color_a: 0.6
 
 # Odometry topics that publishes robot positions to the fabric simulator
 odom_01_topic_name: "d1/ground_truth/fabric_mount/odom"

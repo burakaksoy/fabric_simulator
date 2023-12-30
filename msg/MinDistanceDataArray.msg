@@ -1,0 +1,3 @@
+# MinDistanceDataArray.msg
+
+MinDistanceData[] data

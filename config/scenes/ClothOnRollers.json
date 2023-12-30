@@ -1,0 +1,47 @@
+{
+	"Name": "ClothCollisionScene1",
+	"RigidBodies": [
+		{
+			"id": 1,
+			"geometryFile": "/home/burak/catkin_ws_deformable/src/fabric_simulator/data/mesh/cylinder_unit_box.obj",
+			"isDynamic": 0, 
+			"density": 500, 
+			"translation": [-0.17,0,1.3],
+			"rotationAxis": [1, 0, 0],
+			"rotationAngle": 0.0,
+			"scale": [0.5,2.0,0.5],
+			"velocity": [0,0,0],
+			"angularVelocity": [0,0,0],
+			"restitution" : 0.0,
+			"frictionStatic" : 2.6,
+			"frictionDynamic" : 2.6,
+			"comment": "collisionObjectFileName can contain the path of an SDF file or if it is empty, the simulator will generate an SDF using the mesh in the geometryFile",
+			"collisionObjectFileName": "../scenes/Cache/sphere.obj_50_50_50.csdf",
+			"collisionObjectScale": [0.5,2.0,0.5],
+			"resolutionSDF": [50,50,50],
+			"invertSDF": 0
+		},
+		{
+			"id": 2,
+			"geometryFile": "/home/burak/catkin_ws_deformable/src/fabric_simulator/data/mesh/cylinder_unit_box.obj",
+			"isDynamic": 0, 
+			"density": 500, 
+			"translation": [0.25,0,1.0],
+			"rotationAxis": [1, 0, 0],
+			"rotationAngle": 0.0,
+			"scale": [0.5,2.0,0.5],
+			"velocity": [0,0,0],
+			"angularVelocity": [0,0,0],
+			"restitution" : 0.0,
+			"frictionStatic" : 2.6,
+			"frictionDynamic" : 2.6,
+			"comment": "collisionObjectFileName can contain the path of an SDF file or if it is empty, the simulator will generate an SDF using the mesh in the geometryFile",
+			"collisionObjectFileName": "../scenes/Cache/sphere.obj_50_50_50.csdf",
+			"collisionObjectScale": [0.5,2.0,0.5],
+			"resolutionSDF": [50,50,50],
+			"invertSDF": 0
+		}
+	]
+}
+
+

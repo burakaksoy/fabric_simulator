@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- RViz -->
+    <node name="rviz" pkg="rviz" type="rviz" required="true" 
+          args="-d $(find fabric_simulator)/rviz/cloth_sim.rviz">
+    </node>
+</launch>

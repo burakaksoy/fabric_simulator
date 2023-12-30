@@ -6,12 +6,18 @@
 #define FABRIC_SIMULATOR_H
 
 #include <ros/ros.h>
+
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/WrenchStamped.h>
 #include <std_msgs/Float32.h>
 #include <std_msgs/Int32MultiArray.h>
+#include <std_msgs/Header.h>
 #include <nav_msgs/Odometry.h>
+
+#include <fabric_simulator/MinDistanceDataArray.h> 
 
 #include <std_srvs/Empty.h>
 
@@ -36,15 +42,23 @@
 #include <sstream>
 
 #include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/utilities/rigid_body_scene_loader.h"
+#include "fabric_simulator/utilities/collision_handler.h"
+
+#include <memory> // needed for std::unique_ptr and std::make_unique
 
 namespace fabric_simulator
 {
 
 class FabricSimulator
 {
+    // friend class utilities::CollisionHandler; // Allow CollisionHandler to access all private data of the fabric simulator
 public:
     FabricSimulator(ros::NodeHandle &nh, ros::NodeHandle &nh_local, boost::recursive_mutex &mtx);
     ~FabricSimulator();
+
+    pbd_object::Cloth& getFabric() { return fabric_; }
+    std::vector<utilities::RigidBodySceneLoader::RigidBodyData>& getRigidBodies() { return rigid_bodies_; }
 
 private:
     // Functions ---------------------------------
@@ -62,27 +76,41 @@ private:
                                    const Real &rotationAngle,
                                    const std::vector<Real> &scale);
 
+    pbd_object::Mesh transformMesh(const pbd_object::Mesh &mesh, 
+                                   const Eigen::Matrix<Real, 1, 3> &translation,
+                                   const Eigen::Quaternion<Real> &rotation,
+                                   const Eigen::Matrix<Real, 1, 3> &scale);
+
     void readAttachedRobotForces();
 
-    // Helper functions to publish created markers
-    void publishRvizPoints(const std::vector<geometry_msgs::Point> &points);
-    void publishRvizLines(const std::vector<geometry_msgs::Point> &points);
-    void publishRvizTriangles(const std::vector<geometry_msgs::Point> &points);
+    // Creates the markers to publish
+    void createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, visualization_msgs::Marker &marker);
+    void createRvizWireframeMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX2i *ids, visualization_msgs::Marker &marker);
+    void createRvizTrianglesMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX3i *face_tri_ids, visualization_msgs::Marker &marker);
 
     void publishFaceTriIds(const Eigen::MatrixX3i *ids);
 
-    // Creates the markers to publish
-    // void drawRviz(const Eigen::Matrix<Real,Eigen::Dynamic,3> &poses);
-    // void drawRvizWireframe(const Eigen::Matrix<Real,Eigen::Dynamic,3> &poses, const Eigen::MatrixX2i &ids);
-    void drawRviz(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses);
-    void drawRvizWireframe(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX2i *ids);
-    void drawRvizMesh(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX3i *face_tri_ids_ptr);
+    void createMeshAndWireframeMarkers(const Eigen::Matrix<Real,Eigen::Dynamic,3> *vertices, 
+                                                        const Eigen::MatrixX3i *face_tri_ids, 
+                                                        visualization_msgs::Marker &meshMarker, 
+                                                        visualization_msgs::Marker &wireframeMarker);
+    void setupMeshMarker(visualization_msgs::Marker &marker);
+    void setupWireframeMarker(visualization_msgs::Marker &marker);
+
+    void setupMinDistLineMarker(visualization_msgs::Marker &marker);
+
+    void drawRvizMesh_from_resource(const std::string &mesh_resource); // This is not used however put here as a future reference
 
     // Timer callback functions
     void simulate(const ros::TimerEvent& e);
     void render(const ros::TimerEvent& e);
     void publishWrenches(const ros::TimerEvent& e);
     void publishZeroWrenches();
+    void renderRigidBodies(const ros::TimerEvent& e);
+
+    void publishMinDistancesToRigidBodies(const ros::TimerEvent& e);
+
+    void publishMinDistLineMarkers(const std::vector<std::vector<utilities::CollisionHandler::MinDistanceData>>& min_distances_mt);
 
     // Odometry callback functions
     void odometryCb_01(const nav_msgs::Odometry::ConstPtr odom_msg);
@@ -112,6 +140,11 @@ private:
     ros::Publisher pub_wrench_stamped_03_;
     ros::Publisher pub_wrench_stamped_04_;
 
+    ros::Publisher pub_rb_marker_array_;
+
+    ros::Publisher pub_min_dist_to_rb_;
+    ros::Publisher pub_min_dist_marker_array_;
+
     ros::ServiceServer params_srv_;
     
     ros::Subscriber sub_odom_01_;
@@ -125,6 +158,8 @@ private:
     ros::Timer timer_render_;
     ros::Timer timer_simulate_;
     ros::Timer timer_wrench_pub_;
+    ros::Timer timer_render_rb_;
+    ros::Timer timer_min_dist_to_rb_pub_; // renderMinDistancesToRigidBodies
 
     // ROS Parameters
     bool p_active_;
@@ -134,11 +169,20 @@ private:
     Real gravity_y_;
     Real gravity_z_;
     
-    Real dt_;
+    Real dt_; // simulation time step size
     bool set_sim_rate_auto_; //param to set the simulation rate and dt automatically
 
     int num_substeps_;
     int num_steps_;
+
+    bool is_collision_handling_enabled_;
+    bool visualize_min_distances_;
+
+    Real contact_tolerance_;
+    Real contact_sdf_domain_offset_;
+
+    int fabric_visualization_mode_;
+    int rb_visualization_mode_;
 
     std::string fabric_mesh_path_;
     
@@ -169,6 +213,10 @@ private:
     Real rendering_rate_;
 
     Real wrench_pub_rate_;
+    Real rendering_rb_rate_;
+    Real min_dist_to_rb_pub_rate_; // TODO
+
+    std::string rb_scene_config_path_;
 
     std::string fabric_points_topic_name_;
     std::string fabric_points_frame_id_;
@@ -189,30 +237,38 @@ private:
     std::string wrench_02_frame_id_; 
     std::string wrench_03_frame_id_; 
     std::string wrench_04_frame_id_;
+
+    std::string min_dist_to_rb_topic_name_;
+    std::string min_dist_markers_topic_name_;
     
     Real fabric_rob_z_offset_; // Additional  attachment height to robots
 
     Real robot_attach_radius_;
 
+    // Fabric visualization parameters 
     Real point_marker_scale_;
 
-    Real point_marker_color_r_;
-    Real point_marker_color_g_;
-    Real point_marker_color_b_;
-    Real point_marker_color_a_;
+    std::vector<Real> point_marker_color_rgba_;
 
     Real line_marker_scale_multiplier_;
 
-    Real line_marker_color_r_;
-    Real line_marker_color_g_;
-    Real line_marker_color_b_;
-    Real line_marker_color_a_;
+    std::vector<Real> line_marker_color_rgba_;
 
-    Real mesh_marker_color_r_;
-    Real mesh_marker_color_g_;
-    Real mesh_marker_color_b_;
-    Real mesh_marker_color_a_;
+    std::vector<Real> mesh_marker_color_rgba_;
 
+    // Rigid Body visualization parameters
+    std::string rb_markers_topic_name_;
+
+    Real rb_line_marker_scale_multiplier_;
+
+    std::vector<Real> rb_line_marker_color_rgba_;
+
+    std::vector<Real> rb_mesh_marker_color_rgba_;
+
+    Real min_dist_line_marker_scale_multiplier_;
+
+    std::vector<Real> min_dist_line_marker_color_rgba_;
+    
     // Other variables
     Eigen::Matrix<Real,1,3> gravity_;
 
@@ -251,9 +307,29 @@ private:
     int time_frames_; //to report the performance per frame
     Real time_sum_; //to report the performance per frame
 
+    int marker_id_; // for bookkeeping of the visualization markers of rigid bodies used in the code.
+
     // TODO: In the future, implement cloth and other deformable/rigid objects as PBDObjects
     // std::vector<PBDObject> sim_objects_;
     pbd_object::Cloth fabric_;
+    std::vector<utilities::RigidBodySceneLoader::RigidBodyData> rigid_bodies_;
+
+    // utilities::CollisionHandler collision_handler_;
+    // std::unique_ptr<utilities::CollisionHandler> collision_handler_;
+    utilities::CollisionHandler* collision_handler_;
+
+    static void contactCallbackFunction(const unsigned int contactType,
+                                        const unsigned int bodyIndex1, 
+                                        const unsigned int bodyIndex2,
+                                        const Eigen::Matrix<Real, 3, 1> &cp1, 
+                                        const Eigen::Matrix<Real, 3, 1> &cp2,
+                                        const Eigen::Matrix<Real, 3, 1> &normal, 
+                                        const Real dist,
+                                        const Real restitutionCoeff, 
+                                        const Real frictionCoeffStatic,
+                                        const Real frictionCoeffDynamic,
+                                        void *userData);
+
 };
 
 } // namespace fabric_simulator

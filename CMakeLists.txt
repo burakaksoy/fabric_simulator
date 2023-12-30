@@ -11,6 +11,12 @@ set(CMAKE_CXX_FLAGS "-std=c++11 -fpermissive ${CMAKE_CXX_FLAGS} -Wfatal-errors\ 
 # or
 # set(CMAKE_CXX_FLAGS "-O2 -O3 -std=c++11 -Wall")
 
+set(MSG_DEPS
+    geometry_msgs
+    std_msgs
+    #   visualization_msgs
+)
+
 option(BUILD_WITH_OPENMP "Use OpenMP" ON)
 
 ## Find catkin macros and libraries
@@ -25,6 +31,8 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
   tf2_ros
   visualization_msgs
+  message_generation
+  ${MSG_DEPS}
 )
 
 ## System dependencies are found with CMake's conventions
@@ -42,6 +50,36 @@ if(BUILD_WITH_OPENMP)
         set(OpenMP_FLAGS ${OpenMP_CXX_FLAGS})  # or if you use C: ${OpenMP_C_FLAGS}
         set(OpenMP_LIBRARIES gomp)
     endif()
+endif()
+
+## Discregrid Integration (Needed for any 3D obj file signed distance field (SDF) generation)
+if ((DEFINED Discregrid_INCLUDE_DIR) AND (DEFINED Discregrid_LIB))
+    message(STATUS "Using pre-defined Discregrid: ${Discregrid_INCLUDE_DIR}")
+    set(Discregrid_LIBRARIES ${Discregrid_LIB})
+else()
+    include(ExternalProject)
+    ExternalProject_Add(
+    Ext_Discregrid
+    PREFIX "${CMAKE_BINARY_DIR}/extern/Discregrid"
+    GIT_REPOSITORY https://github.com/InteractiveComputerGraphics/Discregrid.git
+    GIT_TAG "master"  # Or a specific commit
+    # GIT_TAG "4c27e1cc88be828c6ac5b8a05759ac7e01cf79e9"
+    INSTALL_DIR ${CMAKE_BINARY_DIR}/extern/Discregrid
+    CMAKE_ARGS 
+        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DBUILD_AS_SHARED_LIBS=ON
+        -DBUILD_CMD_EXECUTABLE:BOOL=0
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_BINARY_DIR}/extern/Discregrid
+        -DEIGEN3_INCLUDE_DIR:PATH=${EIGEN3_INCLUDE_DIR}
+        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+    )
+
+
+    ExternalProject_Get_Property(Ext_Discregrid INSTALL_DIR)
+    set(Discregrid_INCLUDE_DIR ${INSTALL_DIR}/include)
+    # set(Discregrid_LIBRARIES ${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Discregrid${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(Discregrid_LIBRARIES ${INSTALL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}Discregrid${CMAKE_SHARED_LIBRARY_SUFFIX})
+    message(STATUS "Discregrid will be built: ${Discregrid_INCLUDE_DIR}")
 endif()
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -73,12 +111,16 @@ endif()
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
+set(MSG_FILES 
+    MinDistanceData.msg
+    MinDistanceDataArray.msg
+)
+
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  ${MSG_FILES}
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -95,10 +137,10 @@ endif()
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   geometry_msgs#   std_msgs#   visualization_msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  ${MSG_DEPS}
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -112,9 +154,20 @@ endif()
 
 catkin_package(
  INCLUDE_DIRS include
- LIBRARIES fabric_simulator # cloth, maybe?
- CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs tf tf2 tf2_ros visualization_msgs eigen_conversions 
- DEPENDS EIGEN3 # OpenMP, maybe?
+ LIBRARIES 
+    fabric_simulator # cloth, maybe?
+ CATKIN_DEPENDS 
+    geometry_msgs 
+    roscpp 
+    rospy 
+    std_msgs 
+    tf tf2 tf2_ros 
+    visualization_msgs 
+    eigen_conversions 
+    message_runtime 
+    ${MSG_DEPS} 
+ DEPENDS 
+    EIGEN3 # OpenMP, maybe?
 )
 
 ###########
@@ -123,31 +176,59 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${catkin_INCLUDE_DIRS})
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include 
+    ${catkin_INCLUDE_DIRS}
+)
 include_directories(${EIGEN3_INCLUDE_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${OpenMP_INCLUDE_DIRS})
+include_directories(${Discregrid_INCLUDE_DIR})
 
 #
 # Build libs
 #
 
-# add_library(cloth src/cloth.cpp)
-# target_link_libraries(cloth ${catkin_LIBRARIES} ${Boost_LIBRARIES})
-# add_dependencies(cloth ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+## MEANINGS OF SOME OF THE COMMANDS 
 
-add_library(fabric_simulator src/fabric_simulator.cpp src/cloth.cpp) 
-target_link_libraries(fabric_simulator ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${OpenMP_LIBRARIES})
-add_dependencies(fabric_simulator ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+## add_libray: this command is used to create a library from some source files. In case below, add_library(fabric_simulator src/fabric_simulator.cpp src/cloth.cpp) is creating a library named fabric_simulator from the source files fabric_simulator.cpp and cloth.cpp. This library can be linked to executables or other libraries.
+
+## target_link_libraries: This command is used to specify libraries to link against. In case below, target_link_libraries(fabric_simulator ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${OpenMP_LIBRARIES}) is linking the fabric_simulator library with other libraries, such as catkin_LIBRARIES, Boost_LIBRARIES, and OpenMP_LIBRARIES. This means that fabric_simulator depends on these libraries.
+
+## add_dependencies: This command adds a dependency to a target. add_dependencies(fabric_simulator ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS}) ensures that the specified targets (catkin_EXPORTED_TARGETS and ${PROJECT_NAME}_EXPORTED_TARGETS) are built before fabric_simulator. This is especially important in projects where multiple targets are dependent on each other.
+
+## add_executable: This command creates an executable from the specified source files. add_executable(fabric_simulator_node src/nodes/fabric_simulator_node.cpp) is creating an executable named fabric_simulator_node from the source file fabric_simulator_node.cpp.
+
+add_library(fabric_simulator 
+    src/fabric_simulator/fabric_simulator.cpp 
+    src/fabric_simulator/utilities/cloth.cpp
+    src/fabric_simulator/utilities/rigid_body_scene_loader.cpp 
+    src/fabric_simulator/utilities/collision_handler.cpp
+    src/fabric_simulator/utilities/BoundingSphereHierarchy.cpp
+) 
+target_link_libraries(fabric_simulator 
+    ${catkin_LIBRARIES} 
+    ${Boost_LIBRARIES} 
+    ${OpenMP_LIBRARIES}
+    ${Discregrid_LIBRARIES}
+)
+add_dependencies(fabric_simulator 
+    ${catkin_EXPORTED_TARGETS} 
+    ${${PROJECT_NAME}_EXPORTED_TARGETS}
+    Ext_Discregrid
+)
 
 #
 # Build nodes
 #
 
-add_executable(fabric_simulator_node src/nodes/fabric_simulator_node.cpp)
-target_link_libraries(fabric_simulator_node ${catkin_LIBRARIES} fabric_simulator)
-# or
-# target_link_libraries(fabric_simulator_node ${catkin_LIBRARIES} fabric_simulator cloth) # if cloth lib needs to be uncommented above
+add_executable(fabric_simulator_node 
+    src/nodes/fabric_simulator_node.cpp
+)
+target_link_libraries(fabric_simulator_node 
+    ${catkin_LIBRARIES} 
+    fabric_simulator
+)
 
 
 # #############

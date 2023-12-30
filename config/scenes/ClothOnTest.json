@@ -1,0 +1,27 @@
+{
+	"Name": "ClothCollisionScene1",
+	"RigidBodies": [
+		{
+			"id": 1,
+			"geometryFile": "/home/burak/catkin_ws_deformable/src/fabric_simulator/data/mesh/mandrel.obj",
+			"isDynamic": 0, 
+			"density": 500, 
+			"translation": [0,0,0],
+			"rotationAxis": [1, 0, 0],
+			"rotationAngle": 0.0,
+			"scale": [0.03, 0.03, 0.03],
+			"velocity": [0,0,0],
+			"angularVelocity": [0,0,0],
+			"restitution" : 0.0,
+			"frictionStatic" : 7.4,
+			"frictionDynamic" : 7.4,
+			"comment": "collisionObjectFileName can contain the path of an SDF file or if it is empty, the simulator will generate an SDF using the mesh in the geometryFile",
+			"collisionObjectFileName": "../scenes/Cache/sphere.obj_50_50_50.csdf",
+			"collisionObjectScale": [0.03, 0.03, 0.03],
+			"resolutionSDF": [50,50,50],
+			"invertSDF": 0
+		}
+	]
+}
+
+
