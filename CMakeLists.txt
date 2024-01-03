@@ -52,34 +52,35 @@ if(BUILD_WITH_OPENMP)
     endif()
 endif()
 
-## Discregrid Integration (Needed for any 3D obj file signed distance field (SDF) generation)
-if ((DEFINED Discregrid_INCLUDE_DIR) AND (DEFINED Discregrid_LIB))
-    message(STATUS "Using pre-defined Discregrid: ${Discregrid_INCLUDE_DIR}")
-    set(Discregrid_LIBRARIES ${Discregrid_LIB})
-else()
+## Discregrid Integration
+# This section is required for generating 3D object file signed distance fields (SDF) using Discregrid.
+if(NOT DEFINED Discregrid_INCLUDE_DIR OR NOT DEFINED Discregrid_LIBRARIES)
+    # If Discregrid paths are not predefined, set up Discregrid as an external project.
+
     include(ExternalProject)
     ExternalProject_Add(
-    Ext_Discregrid
-    PREFIX "${CMAKE_BINARY_DIR}/extern/Discregrid"
-    GIT_REPOSITORY https://github.com/InteractiveComputerGraphics/Discregrid.git
-    GIT_TAG "master"  # Or a specific commit
-    # GIT_TAG "4c27e1cc88be828c6ac5b8a05759ac7e01cf79e9"
-    INSTALL_DIR ${CMAKE_BINARY_DIR}/extern/Discregrid
-    CMAKE_ARGS 
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-        -DBUILD_AS_SHARED_LIBS=ON
-        -DBUILD_CMD_EXECUTABLE:BOOL=0
-        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_BINARY_DIR}/extern/Discregrid
-        -DEIGEN3_INCLUDE_DIR:PATH=${EIGEN3_INCLUDE_DIR}
-        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+        Ext_Discregrid
+        PREFIX "${CMAKE_BINARY_DIR}/extern/Discregrid"
+        GIT_REPOSITORY https://github.com/InteractiveComputerGraphics/Discregrid.git
+        # Consider specifying a specific tag or commit to ensure consistent builds.
+        GIT_TAG "master"  # Or replace with a specific commit like "4c27e1cc88be828c6ac5b8a05759ac7e01cf79e9"
+        INSTALL_DIR "${CMAKE_BINARY_DIR}/extern/Discregrid"
+        CMAKE_ARGS 
+            -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+            -DBUILD_AS_SHARED_LIBS=ON
+            -DBUILD_CMD_EXECUTABLE:BOOL=0
+            -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_BINARY_DIR}/extern/Discregrid
+            -DEIGEN3_INCLUDE_DIR:PATH=${EIGEN3_INCLUDE_DIR}
+            -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
     )
 
-
+    # Retrieve and cache the installation directory of Discregrid.
     ExternalProject_Get_Property(Ext_Discregrid INSTALL_DIR)
-    set(Discregrid_INCLUDE_DIR ${INSTALL_DIR}/include)
-    # set(Discregrid_LIBRARIES ${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}Discregrid${CMAKE_STATIC_LIBRARY_SUFFIX})
-    set(Discregrid_LIBRARIES ${INSTALL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}Discregrid${CMAKE_SHARED_LIBRARY_SUFFIX})
-    message(STATUS "Discregrid will be built: ${Discregrid_INCLUDE_DIR}")
+    set(Discregrid_INCLUDE_DIR "${INSTALL_DIR}/include" CACHE INTERNAL "Discregrid include directory")
+    set(Discregrid_LIBRARIES "${INSTALL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}Discregrid${CMAKE_SHARED_LIBRARY_SUFFIX}" CACHE INTERNAL "Discregrid libraries")
+else()
+    # If Discregrid paths are predefined, use them.
+    message(STATUS "Using pre-defined Discregrid: ${Discregrid_INCLUDE_DIR}")
 endif()
 
 ## Uncomment this if the package has a setup.py. This macro ensures

@@ -74,5 +74,6 @@
         "variant": "cpp",
         "regex": "cpp",
         "future": "cpp"
-    }
+    },
+    "window.zoomLevel": 5
 }
