@@ -66,7 +66,11 @@ private:
     // Create a mesh structure with face triangle ids and vertice for particle initial poses
     // face triangle ids; vector with n elements with 3d integer rowvectors. each row is 3 particle id of a triangle
     // vertice: vector with m elements with 3d row vectors. each row is 3D xyz position of a particle.
-    pbd_object::Mesh createMeshRectangular(const std::string &name, const Real &fabric_x, const Real &fabric_y, const Real &fabric_z, const Real &fabric_res);
+    pbd_object::Mesh createMeshRectangular(const std::string &name, 
+                                        const Real &fabric_x, 
+                                        const Real &fabric_y, 
+                                        const Real &fabric_z, 
+                                        const Real &fabric_res);
 
     pbd_object::Mesh loadMesh(const std::string &name, const std::string &path, const Real &fabric_z);
 
@@ -84,16 +88,21 @@ private:
     void readAttachedRobotForces();
 
     // Creates the markers to publish
-    void createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, visualization_msgs::Marker &marker);
-    void createRvizWireframeMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX2i *ids, visualization_msgs::Marker &marker);
-    void createRvizTrianglesMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX3i *face_tri_ids, visualization_msgs::Marker &marker);
+    void createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, 
+                                visualization_msgs::Marker &marker);
+    void createRvizWireframeMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, 
+                                const Eigen::MatrixX2i *ids, 
+                                visualization_msgs::Marker &marker);
+    void createRvizTrianglesMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, 
+                                    const Eigen::MatrixX3i *face_tri_ids, 
+                                    visualization_msgs::Marker &marker);
 
     void publishFaceTriIds(const Eigen::MatrixX3i *ids);
 
     void createMeshAndWireframeMarkers(const Eigen::Matrix<Real,Eigen::Dynamic,3> *vertices, 
-                                                        const Eigen::MatrixX3i *face_tri_ids, 
-                                                        visualization_msgs::Marker &meshMarker, 
-                                                        visualization_msgs::Marker &wireframeMarker);
+                                        const Eigen::MatrixX3i *face_tri_ids, 
+                                        visualization_msgs::Marker &meshMarker, 
+                                        visualization_msgs::Marker &wireframeMarker);
     void setupMeshMarker(visualization_msgs::Marker &marker);
     void setupWireframeMarker(visualization_msgs::Marker &marker);
 

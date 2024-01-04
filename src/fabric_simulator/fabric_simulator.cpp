@@ -303,7 +303,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     // std::cout << "fabric_mesh.vertices:\n" << fabric_mesh.vertices << std::endl;
     // std::cout << "fabric_mesh.face_tri_ids:\n" << fabric_mesh.face_tri_ids << std::endl;
 
-    // Transform the loaded mesh
+    // Transform the created/loaded mesh
     fabric_mesh = FabricSimulator::transformMesh(fabric_mesh,
                                                 fabric_translation_,
                                                 fabric_rotationAxis_,
@@ -662,7 +662,11 @@ void FabricSimulator::reset(){
     nh_local_.setParam("reset",false);
 }
 
-pbd_object::Mesh FabricSimulator::createMeshRectangular(const std::string &name, const Real &fabric_x, const Real &fabric_y, const Real &fabric_z, const Real &fabric_res){
+pbd_object::Mesh FabricSimulator::createMeshRectangular(const std::string &name, 
+                                                        const Real &fabric_x, 
+                                                        const Real &fabric_y, 
+                                                        const Real &fabric_z, 
+                                                        const Real &fabric_res){
     // Create vector of 3D Eigen vectors to hold the "list of vertices" and "list of face triangle ids"
     std::vector<Eigen::Matrix<Real,1,3>> vertices;
     std::vector<Eigen::RowVector3i> face_tri_ids;
@@ -788,7 +792,9 @@ pbd_object::Mesh FabricSimulator::createMeshRectangular(const std::string &name,
     return mesh;
 }
 
-pbd_object::Mesh FabricSimulator::loadMesh(const std::string &name, const std::string &path, const Real &fabric_z) {
+pbd_object::Mesh FabricSimulator::loadMesh(const std::string &name, 
+                                        const std::string &path, 
+                                        const Real &fabric_z) {
     // Function to load an .obj file 
     std::ifstream file(path);
     if (!file.is_open()) {

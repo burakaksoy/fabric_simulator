@@ -213,11 +213,16 @@ target_link_libraries(fabric_simulator
     ${OpenMP_LIBRARIES}
     ${Discregrid_LIBRARIES}
 )
+# Standard dependencies
 add_dependencies(fabric_simulator 
     ${catkin_EXPORTED_TARGETS} 
     ${${PROJECT_NAME}_EXPORTED_TARGETS}
-    Ext_Discregrid
 )
+
+# Add Ext_Discregrid as a dependency only if it exists
+if(TARGET Ext_Discregrid)
+    add_dependencies(fabric_simulator Ext_Discregrid)
+endif()
 
 #
 # Build nodes
