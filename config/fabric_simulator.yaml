@@ -78,6 +78,7 @@ min_dist_to_rb_pub_rate: 50.0 # Hz, frequency to publish minimum distances to th
 # Rigid body scene .json file, If empty, no rigid bodies exist in the simulator
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrel.json 
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCylinderUnitBox.json
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCylinderVaseUnitBox.json
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnFloor.json
 rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCube_5.json
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCube_5_edit.json
