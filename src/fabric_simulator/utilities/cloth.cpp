@@ -264,9 +264,9 @@ void Cloth::solveStretching(const Real &compliance, const Real &dt){
         grads_ = pos_.row(id0) - pos_.row(id1);
 
         Real len = grads_.norm();
-        if (len <= static_cast<Real>(1e-13)){
-            continue;
-        }
+        // if (len <= static_cast<Real>(1e-13)){
+        //     continue;
+        // }
 
         grads_ = grads_ / len;
 
@@ -276,9 +276,9 @@ void Cloth::solveStretching(const Real &compliance, const Real &dt){
         Real C = len - rest_len;
         Real K = w+alpha;
         
-        if (std::fabs(K) <= static_cast<Real>(1e-13)){
-            continue;
-        } 
+        // if (std::fabs(K) <= static_cast<Real>(1e-13)){
+        //     continue;
+        // } 
 
         Real s = -C / K; // lambda
 
@@ -312,9 +312,9 @@ void Cloth::solveBending(const Real &compliance, const Real &dt){
         grads_ = pos_.row(id0) - pos_.row(id1);
 
         Real len = grads_.norm();
-        if (len < static_cast<Real>(1e-13)){
-            continue;
-        }
+        // if (len < static_cast<Real>(1e-13)){
+        //     continue;
+        // }
 
         grads_ = grads_ / len;
 
@@ -322,9 +322,9 @@ void Cloth::solveBending(const Real &compliance, const Real &dt){
         Real C = len - rest_len;
         Real K = w+alpha;
     
-        if (std::fabs(K) <= static_cast<Real>(1e-13)){
-            continue;
-        } 
+        // if (std::fabs(K) <= static_cast<Real>(1e-13)){
+        //     continue;
+        // } 
 
         Real s = -C / K; // lambda
 

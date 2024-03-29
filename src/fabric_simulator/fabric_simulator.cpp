@@ -547,14 +547,19 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             sub_odom_03_ = nh_.subscribe(odom_03_topic_name_, 1, &FabricSimulator::odometryCb_03, this);
             sub_odom_04_ = nh_.subscribe(odom_04_topic_name_, 1, &FabricSimulator::odometryCb_04, this);
 
-            // Create a subscriber for each custom static particle 
+            // Create a subscriber for each custom static particle
             for (const int& particle_id : custom_static_particles_) {
-                std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
-                ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 10,
-                                                                        [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) { 
-                                                                            this->odometryCb_custom_static_particles(odom_msg, particle_id); }
-                                                                        );
-                custom_static_particles_odom_subscribers_.push_back(sub);
+                // Check if a subscriber for this particle ID already exists
+                if (custom_static_particles_odom_subscribers_.find(particle_id) == custom_static_particles_odom_subscribers_.end()) {
+                    std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
+                    ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 10,
+                                                                            [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) { 
+                                                                                this->odometryCb_custom_static_particles(odom_msg, particle_id); }
+                                                                            );
+                    // Add the new subscriber to the map
+                    custom_static_particles_odom_subscribers_[particle_id] = sub;
+                }
+                // Else, a subscriber for this particle ID already exists
             }
 
             // Create publishers
@@ -596,7 +601,9 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             sub_odom_03_.shutdown();
             sub_odom_04_.shutdown();
 
-            for(ros::Subscriber& subscriber : custom_static_particles_odom_subscribers_) {
+            // Iterate through the map and shut down each subscriber
+            for (auto& kv : custom_static_particles_odom_subscribers_) {
+                ros::Subscriber& subscriber = kv.second; // Get the subscriber (which is the value in the key-value pair)
                 subscriber.shutdown();
             }
 
@@ -629,7 +636,7 @@ void FabricSimulator::reset(){
     time_frames_ = 0;
     time_sum_ = 0.0;
 
-    marker_id_ = 0;
+    marker_id_ = 3;
 
     is_auto_sim_rate_set_ = false; 
 
@@ -956,7 +963,7 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
     }
     // -------------------------------
 
-    // // To debug force readings from hanged corners (use inly when robots are not attached)
+    // // To debug force readings from hanged corners (use only when robots are not attached)
     // std::vector<int> *attached_ids_ptr = fabric_.getAttachedIdsPtr();
     // Eigen::Matrix<Real,Eigen::Dynamic,3> *for_ptr = fabric_.getForPtr();
     // int id = (*attached_ids_ptr)[0]; // First attached id
@@ -1063,8 +1070,8 @@ void FabricSimulator::createRvizWireframeMarker(const Eigen::Matrix<Real,Eigen::
     marker.color.a = line_marker_color_rgba_[3];
 
     for (int i = 0; i < ids->rows(); i++) {
-        int id0 = (*ids)(i, 0);
-        int id1 = (*ids)(i, 1);
+        const int &id0 = (*ids)(i, 0);
+        const int &id1 = (*ids)(i, 1);
 
         geometry_msgs::Point p1, p2;
         p1.x = (*poses)(id0, 0);
@@ -1127,9 +1134,9 @@ void FabricSimulator::publishFaceTriIds(const Eigen::MatrixX3i *ids){
     std_msgs::Int32MultiArray array;
 
     for (int i = 0; i < ids->rows(); i++) {
-        int id0 = (*ids)(i, 0);
-        int id1 = (*ids)(i, 1);
-        int id2 = (*ids)(i, 2);
+        const int &id0 = (*ids)(i, 0);
+        const int &id1 = (*ids)(i, 1);
+        const int &id2 = (*ids)(i, 2);
 
         // Append the ids to the array
         array.data.push_back(id0);

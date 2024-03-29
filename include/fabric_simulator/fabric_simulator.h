@@ -161,8 +161,8 @@ private:
     ros::Subscriber sub_odom_03_;
     ros::Subscriber sub_odom_04_;
 
-    // Define the vector of subscribers
-    std::vector<ros::Subscriber> custom_static_particles_odom_subscribers_;
+    // Map to hold particle ID and its corresponding subscriber
+    std::map<int, ros::Subscriber> custom_static_particles_odom_subscribers_;
 
     ros::Timer timer_render_;
     ros::Timer timer_simulate_;

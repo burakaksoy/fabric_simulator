@@ -68,7 +68,7 @@ custom_static_particles_odom_topic_prefix: "custom_static_particles_odom_"
 # Global artificial velocity damping coefficients. Defaults to 0.0. 
 global_damp_coeff_v: 0.0 # 7.1e-1 # 2.1e-4; // 0.9e-3
 
-simulation_rate: 1000.0 #1000.0
+simulation_rate: 333.333 #1000.0
 rendering_rate: 30.0 # Hz, frequency to publish the fabric vertices, edges and triangle mesh to RVIZ visualization markers
 
 wrench_pub_rate: 100.0 # Hz, frequency to publish the fabric forces at the attachment points
@@ -135,7 +135,7 @@ fabric_rob_z_offset_: 0.0 # z offset between the specified frame and fabric atta
 
 robot_attach_radius: 0.35
 
-# Published topic names of the forces of attached robots.
+# Published topic names of the forces of    robots.
 wrench_01_topic_name: "d1/fabric_wrench_stamped"
 wrench_02_topic_name: "d2/fabric_wrench_stamped"
 wrench_03_topic_name: "d3/fabric_wrench_stamped"
