@@ -17,7 +17,7 @@ import visualization_msgs.msg # for Markers
 import geometry_msgs.msg
 
 rospy.init_node('cloth_sim_node', anonymous=True)    
-topic_name = "cloth_points"
+topic_name = "fabric_markers"
 pub = rospy.Publisher(topic_name, visualization_msgs.msg.Marker, queue_size=1)
 
 

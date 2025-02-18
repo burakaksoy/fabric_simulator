@@ -75,18 +75,36 @@ public:
           const Real &stretching_compliance,
           const Real &bending_compliance,
           const Real &density,
-          const Real &global_damp_coeff_v);
+          const Real &global_damp_coeff_v,
+          const Eigen::Matrix<Real,1,3> &gravity);
     ~Cloth();
 
     void preSolve(const Real &dt, const Eigen::Matrix<Real,1,3> &gravity);
     void solve(const Real &dt);
     void postSolve(const Real &dt);
 
-    void hangFromCorners(const int &num_corners);
+    void changeParticleDynamicity(const int &particle, const bool &is_dynamic);
+
+    void hangFromCorners(const int &num_corners, std::vector<int>& custom_static_particles_);
     void setStaticParticles(const std::vector<int> &particles);
+    void setDynamicParticles(const std::vector<int> &particles);
+
+    const bool isStaticParticle(const int &particle) const;
+    const bool isDynamicParticle(const int &particle) const;
+
+    void setStretchingCompliance(const Real &stretching_compliance);
+    void setBendingCompliance(const Real &bending_compliance);
+
+    const Real getStretchingCompliance();
+    const Real getBendingCompliance();
+
+    const Real getDensity();
+    const Eigen::Matrix<Real,1,3> getGravity();
 
     int attachNearest(const Eigen::Matrix<Real,1,3> &pos);
     void updateAttachedPose(const int &id, const Eigen::Matrix<Real,1,3> &pos);
+
+    void updateAttachedVelocity(const int &id, const Eigen::Matrix<Real,1,3> &vel);
 
     void attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
                                     std::vector<int> &ids,
@@ -116,6 +134,10 @@ public:
 
     void resetForces();
 
+    void normalizeForces(const int &num_substeps);
+
+    void resetLambdas();
+
 private:
     // Functions
     void initPhysics(const Eigen::MatrixX3i &face_tri_ids);
@@ -133,6 +155,9 @@ private:
 
     // Variables
     Mesh mesh_;
+
+    Eigen::Matrix<Real,1,3> gravity_;
+
     int num_particles_;
 
     Eigen::Matrix<Real,Eigen::Dynamic,3> pos_;
@@ -142,6 +167,8 @@ private:
     Eigen::Matrix<Real,Eigen::Dynamic,3> for_;
     
     Eigen::Matrix<Real,1,Eigen::Dynamic> inv_mass_;
+    std::vector<bool> is_dynamic_; // vector that holds the data whether the particle is dynamic or not
+
     Real density_; // fabric mass per meter square (kg/m^2)
     Eigen::Matrix<Real,1,3> grads_;
 
@@ -149,6 +176,8 @@ private:
     Eigen::MatrixX4i bending_ids_;
     Eigen::Matrix<Real,1,Eigen::Dynamic> stretching_lengths_;
     Eigen::Matrix<Real,1,Eigen::Dynamic> bending_lengths_;
+
+    std::vector<Eigen::Matrix<Real,6,1>> Lambda_;
 
     Real stretching_compliance_;
     Real bending_compliance_;

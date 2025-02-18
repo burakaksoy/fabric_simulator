@@ -54,6 +54,7 @@ FabricSimulator::FabricSimulator(ros::NodeHandle &nh, ros::NodeHandle &nh_local,
     timer_wrench_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishWrenches, this,false, false); 
     timer_render_rb_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::renderRigidBodies, this,false, false); 
     timer_min_dist_to_rb_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishMinDistancesToRigidBodies, this,false, false); 
+    timer_fabric_state_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishFabricState, this,false, false); 
 
     // Initilize parameters
     params_srv_ = nh_local_.advertiseService("params", &FabricSimulator::updateParams, this);
@@ -102,6 +103,7 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("custom_static_particles");
 
     nh_local_.deleteParam("custom_static_particles_odom_topic_prefix");
+    nh_local_.deleteParam("custom_static_particles_cmd_vel_topic_prefix");
 
     nh_local_.deleteParam("global_damp_coeff_v");
 
@@ -110,11 +112,13 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("wrench_pub_rate");
     nh_local_.deleteParam("rendering_rb_rate");
     nh_local_.deleteParam("min_dist_to_rb_pub_rate");
+    nh_local_.deleteParam("fabric_state_pub_rate");
 
     nh_local_.deleteParam("rb_scene_config_path");
 
-    nh_local_.deleteParam("fabric_points_topic_name");
-    nh_local_.deleteParam("fabric_points_frame_id");
+    nh_local_.deleteParam("fabric_state_topic_name");
+    nh_local_.deleteParam("fabric_markers_topic_name");
+    nh_local_.deleteParam("fabric_frame_id");
 
     nh_local_.deleteParam("face_tri_ids_topic_name");
     
@@ -152,6 +156,9 @@ FabricSimulator::~FabricSimulator() {
 
     nh_local_.deleteParam("min_dist_to_rb_topic_name");
     nh_local_.deleteParam("min_dist_markers_topic_name");
+
+    nh_local_.deleteParam("change_particle_dynamicity_topic_name");
+    nh_local_.deleteParam("set_particle_dynamicity_service_name");
  
     nh_local_.deleteParam("rb_line_marker_scale_multiplier");
 
@@ -214,6 +221,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param("custom_static_particles", custom_static_particles_, std::vector<int>());
 
     nh_local_.param<std::string>("custom_static_particles_odom_topic_prefix", custom_static_particles_odom_topic_prefix_, std::string("custom_static_particles_odom_"));
+    nh_local_.param<std::string>("custom_static_particles_cmd_vel_topic_prefix", custom_static_particles_cmd_vel_topic_prefix_, std::string("custom_static_particles_cmd_vel_"));
 
     nh_local_.param<Real>("global_damp_coeff_v", global_damp_coeff_v_, 0.0);
     
@@ -223,11 +231,13 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<Real>("wrench_pub_rate", wrench_pub_rate_, 60.0); //60
     nh_local_.param<Real>("rendering_rb_rate", rendering_rb_rate_, 1.0); //1
     nh_local_.param<Real>("min_dist_to_rb_pub_rate", min_dist_to_rb_pub_rate_, 60.0); //60.0
+    nh_local_.param<Real>("fabric_state_pub_rate", fabric_state_pub_rate_, 60.0); //60.0
 
     nh_local_.param<std::string>("rb_scene_config_path", rb_scene_config_path_, std::string(""));
 
-    nh_local_.param<std::string>("fabric_points_topic_name", fabric_points_topic_name_, std::string("cloth_points"));
-    nh_local_.param<std::string>("fabric_points_frame_id", fabric_points_frame_id_, std::string("map"));
+    nh_local_.param<std::string>("fabric_state_topic_name", fabric_state_topic_name_, std::string("fabric_state"));
+    nh_local_.param<std::string>("fabric_markers_topic_name", fabric_markers_topic_name_, std::string("fabric_markers"));
+    nh_local_.param<std::string>("fabric_frame_id", fabric_frame_id_, std::string("map"));
 
     nh_local_.param<std::string>("face_tri_ids_topic_name", face_tri_ids_topic_name_, std::string("face_tri_ids"));
 
@@ -265,6 +275,17 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<std::string>("min_dist_to_rb_topic_name", min_dist_to_rb_topic_name_, std::string("min_dist_to_rigid_bodies"));
     nh_local_.param<std::string>("min_dist_markers_topic_name", min_dist_markers_topic_name_, std::string("min_dist_markers"));
 
+    nh_local_.param<std::string>("change_particle_dynamicity_topic_name", change_particle_dynamicity_topic_name_, std::string("change_particle_dynamicity"));
+    nh_local_.param<std::string>("set_particle_dynamicity_service_name", set_particle_dynamicity_service_name_, std::string("set_particle_dynamicity"));
+
+    nh_local_.param<std::string>("set_fabric_stretching_compliance_service_name", set_fabric_stretching_compliance_service_name_, std::string("set_fabric_stretching_compliance"));
+    nh_local_.param<std::string>("set_fabric_bending_compliance_service_name", set_fabric_bending_compliance_service_name_, std::string("set_fabric_bending_compliance"));
+    nh_local_.param<std::string>("get_fabric_stretching_compliance_service_name", get_fabric_stretching_compliance_service_name_, std::string("get_fabric_stretching_compliance"));
+    nh_local_.param<std::string>("get_fabric_bending_compliance_service_name", get_fabric_bending_compliance_service_name_, std::string("get_fabric_bending_compliance"));
+    nh_local_.param<std::string>("change_fabric_stretching_compliance_topic_name", change_fabric_stretching_compliance_topic_name_, std::string("change_fabric_stretching_compliance"));
+    nh_local_.param<std::string>("change_fabric_bending_compliance_topic_name", change_fabric_bending_compliance_topic_name_, std::string("change_fabric_bending_compliance"));
+    
+    nh_local_.param<std::string>("enable_collision_handling_service_name", enable_collision_handling_service_name_, std::string("enable_collision_handling"));
 
     nh_local_.param<Real>("rb_line_marker_scale_multiplier", rb_line_marker_scale_multiplier_, 1.0);
     
@@ -283,6 +304,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     timer_wrench_pub_.setPeriod(ros::Duration(1.0/wrench_pub_rate_));
     timer_render_rb_.setPeriod(ros::Duration(1.0/rendering_rb_rate_));
     timer_min_dist_to_rb_pub_.setPeriod(ros::Duration(1.0/min_dist_to_rb_pub_rate_));
+    timer_fabric_state_pub_.setPeriod(ros::Duration(1.0/fabric_state_pub_rate_));
 
     // Initilize gravity vector
     gravity_ << gravity_x_, gravity_y_, gravity_z_;    
@@ -315,11 +337,15 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
                                 fabric_stretching_compliance_,
                                 fabric_bending_compliance_,
                                 fabric_density_,
-                                global_damp_coeff_v_);
+                                global_damp_coeff_v_,
+                                gravity_);
 
     if(fabric_mesh_path_.empty()) {
-        // Hang fabric from corners
-        fabric_.hangFromCorners(num_hang_corners_);
+        // Hang fabric from corners, add the ids of the hang corners to the custom_static_particles_ vector
+        fabric_.hangFromCorners(num_hang_corners_, custom_static_particles_);
+
+        // Update the ROS parameter server with the new vector
+        nh_local_.setParam("custom_static_particles", custom_static_particles_);
     }
     
     // Set static particles
@@ -353,6 +379,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             std::cout << "Collision Object Scale: " << rbd.m_collisionObjectScale << std::endl;
             std::cout << "Resolution SDF: " << rbd.m_resolutionSDF << std::endl;
             std::cout << "Invert SDF: " << std::boolalpha << rbd.m_invertSDF << std::endl;
+            std::cout << "Is Visible: " << std::boolalpha << rbd.m_isVisible << std::endl;
             std::cout << "---------------------------------------" << std::endl;
         }
         */
@@ -508,7 +535,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     // Create CollisionHandler  ()'this' pointer to pass the data of this fabric simulator class)
     // collision_handler_ = std::make_unique<utilities::CollisionHandler>(fabric_, rigid_bodies_);
     collision_handler_ = new utilities::CollisionHandler(fabric_, rigid_bodies_);
- 
+
     collision_handler_->setContactTolerance(contact_tolerance_);
 
     collision_handler_->setContactCallback(contactCallbackFunction, this);
@@ -541,6 +568,10 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
     if (p_active_ != prev_active) {
         if (p_active_) {
+            // Create visualization marker publisher
+            pub_fabric_state_ = nh_.advertise<fabric_simulator::SegmentStateArray>(fabric_state_topic_name_, 1);
+            pub_fabric_marker_array_ = nh_.advertise<visualization_msgs::MarkerArray>(fabric_markers_topic_name_, 1);
+
             // Create subscribers
             sub_odom_01_ = nh_.subscribe(odom_01_topic_name_, 1, &FabricSimulator::odometryCb_01, this);
             sub_odom_02_ = nh_.subscribe(odom_02_topic_name_, 1, &FabricSimulator::odometryCb_02, this);
@@ -549,7 +580,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
             // Create a subscriber for each custom static particle
             for (const int& particle_id : custom_static_particles_) {
-                // Check if a subscriber for this particle ID already exists
+                // Check if an odom subscriber for this particle ID already exists
                 if (custom_static_particles_odom_subscribers_.find(particle_id) == custom_static_particles_odom_subscribers_.end()) {
                     std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
                     ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 10,
@@ -560,11 +591,38 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
                     custom_static_particles_odom_subscribers_[particle_id] = sub;
                 }
                 // Else, a subscriber for this particle ID already exists
+
+                // Check if a cmd_vel subscriber for this particle ID already exists
+                if (custom_static_particles_cmd_vel_subscribers_.find(particle_id) == custom_static_particles_cmd_vel_subscribers_.end()) {
+                    std::string topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);
+                    ros::Subscriber sub = nh_.subscribe<geometry_msgs::Twist>(topic, 10,
+                                                                            [this, particle_id](const geometry_msgs::Twist::ConstPtr& twist_msg) { 
+                                                                                this->cmdVelCb_custom_static_particles(twist_msg, particle_id); }
+                                                                            );    
+                    // Add the new subscriber to the map
+                    custom_static_particles_cmd_vel_subscribers_[particle_id] = sub;
+                }
+                // Else, a subscriber for this particle ID already exists
             }
 
-            // Create publishers
-            pub_fabric_points_ = nh_.advertise<visualization_msgs::MarkerArray>(fabric_points_topic_name_, 1);
+            // Create a subscriber for the change particle dynamicity topic
+            sub_change_particle_dynamicity_ = nh_.subscribe(change_particle_dynamicity_topic_name_, 
+                                                            1, 
+                                                            &FabricSimulator::changeParticleDynamicityCb, 
+                                                            this);
 
+            // Create a subscriber for the change fabric compliance topics
+            sub_change_stretching_compliance_ = nh_.subscribe(change_fabric_stretching_compliance_topic_name_, 
+                                                                1, 
+                                                                &FabricSimulator::changeStretchingComplianceCb, 
+                                                                this);
+        
+            sub_change_bending_compliance_ = nh_.subscribe(change_fabric_bending_compliance_topic_name_,
+                                                            1,
+                                                            &FabricSimulator::changeBendingComplianceCb,
+                                                            this);  
+
+            // Create publishers
             pub_face_tri_ids_ = nh_.advertise<std_msgs::Int32MultiArray>(face_tri_ids_topic_name_, 1);
 
             pub_wrench_stamped_01_ = nh_.advertise<geometry_msgs::WrenchStamped>(wrench_01_topic_name_, 1);
@@ -578,12 +636,32 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
             pub_min_dist_marker_array_ = nh_.advertise<visualization_msgs::MarkerArray>(min_dist_markers_topic_name_, 1);
 
+            // Create Services
+            set_particle_dynamicity_srv_ = nh_local_.advertiseService(set_particle_dynamicity_service_name_, 
+                &FabricSimulator::setParticleDynamicityCallback, this);
+
+            set_stretching_compliance_srv_ = nh_local_.advertiseService(set_fabric_stretching_compliance_service_name_,
+                            &FabricSimulator::setFabricStretchingComplianceCallback, this);
+
+            set_bending_compliance_srv_ = nh_local_.advertiseService(set_fabric_bending_compliance_service_name_,
+                            &FabricSimulator::setFabricBendingComplianceCallback, this);
+
+            get_stretching_compliance_srv_ = nh_local_.advertiseService(get_fabric_stretching_compliance_service_name_,
+                            &FabricSimulator::getFabricStretchingComplianceCallback, this);
+
+            get_bending_compliance_srv_ = nh_local_.advertiseService(get_fabric_bending_compliance_service_name_,
+                            &FabricSimulator::getFabricBendingComplianceCallback, this);
+
+            enable_collision_handling_srv_ = nh_local_.advertiseService(enable_collision_handling_service_name_,
+                            &FabricSimulator::enableCollisionHandlingCallback, this);
+
             // Start timers
             timer_simulate_.start();
             timer_render_.start();
             timer_wrench_pub_.start();
             timer_render_rb_.start();
             timer_min_dist_to_rb_pub_.start();
+            timer_fabric_state_pub_.start();
         }
         else {
             // Send empty message?
@@ -591,7 +669,8 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             publishZeroWrenches();
 
             // Stop publishers
-            pub_fabric_points_.shutdown();
+            pub_fabric_marker_array_.shutdown();
+            pub_fabric_state_.shutdown();
 
             pub_face_tri_ids_.shutdown();
 
@@ -601,8 +680,18 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             sub_odom_03_.shutdown();
             sub_odom_04_.shutdown();
 
+            sub_change_particle_dynamicity_.shutdown();
+
+            sub_change_stretching_compliance_.shutdown();
+            sub_change_bending_compliance_.shutdown();
+
             // Iterate through the map and shut down each subscriber
             for (auto& kv : custom_static_particles_odom_subscribers_) {
+                ros::Subscriber& subscriber = kv.second; // Get the subscriber (which is the value in the key-value pair)
+                subscriber.shutdown();
+            }
+
+            for (auto& kv : custom_static_particles_cmd_vel_subscribers_) {
                 ros::Subscriber& subscriber = kv.second; // Get the subscriber (which is the value in the key-value pair)
                 subscriber.shutdown();
             }
@@ -623,6 +712,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             timer_wrench_pub_.stop();
             timer_render_rb_.stop();
             timer_min_dist_to_rb_pub_.stop();
+            timer_fabric_state_pub_.stop();
         }
     }
 
@@ -667,6 +757,257 @@ void FabricSimulator::reset(){
 
     p_reset_ = false;
     nh_local_.setParam("reset",false);
+}
+
+
+bool FabricSimulator::setParticleDynamicityCallback(fabric_simulator::SetParticleDynamicity::Request &req,
+                                                    fabric_simulator::SetParticleDynamicity::Response &res)
+{
+    int particle_id = req.particle_id;
+    bool is_dynamic = req.is_dynamic;
+
+    try {
+        fabric_.changeParticleDynamicity(particle_id, is_dynamic);
+    } catch (const std::out_of_range& e) {
+        ROS_ERROR("Error in setParticleDynamicity: %s", e.what());
+        res.success = false; // Indicate failure
+        return true; // Still return true to indicate the service call was processed
+    }
+
+    // Update custom_static_particles_ accordingly
+    if (is_dynamic) {
+        // Remove particle_id from custom_static_particles_ if it exists
+        auto it = std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id);
+        if (it != custom_static_particles_.end()) {
+            custom_static_particles_.erase(it);
+            ROS_INFO("Particle %d set to dynamic and removed from custom_static_particles_", particle_id);
+        }
+        else {
+            ROS_INFO("Particle %d not found in custom_static_particles_", particle_id);
+        }
+    } else {
+        // Add particle_id to custom_static_particles_ if not already present
+        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id) == custom_static_particles_.end()) {
+            custom_static_particles_.push_back(particle_id);
+            ROS_INFO("Particle %d set to static and added to custom_static_particles_", particle_id);
+        }
+    }
+
+    // Check if a subscriber for this particle ID exists
+    auto sub_iter = custom_static_particles_odom_subscribers_.find(particle_id);
+    auto sub_iter_cmd_vel = custom_static_particles_cmd_vel_subscribers_.find(particle_id);
+
+    if (is_dynamic){  // particle is being tried to set dynamic
+        if (sub_iter != custom_static_particles_odom_subscribers_.end()) {
+            // Subscriber exists, shut it down
+            sub_iter->second.shutdown();
+            custom_static_particles_odom_subscribers_.erase(sub_iter); // Remove the subscriber from the map
+            res.success = true;
+            ROS_INFO("Odom Subscriber for particle %d shut down", particle_id);
+        } else {
+            // No subscriber was found for the given ID
+            res.success = false; 
+            ROS_INFO("No odom subscriber found for particle %d", particle_id);
+        }
+
+        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()) {
+            // Subscriber exists, shut it down
+            sub_iter_cmd_vel->second.shutdown();
+            custom_static_particles_cmd_vel_subscribers_.erase(sub_iter_cmd_vel); // Remove the subscriber from the map
+            res.success = true;
+            ROS_INFO("Vel Subscriber for particle %d shut down", particle_id);
+        } else {
+            // No subscriber was found for the given ID
+            res.success = false; 
+            ROS_INFO("No cmd_vel subscriber found for particle %d", particle_id);
+        }
+    }
+    else{ // particle is being tried to set static
+        if (sub_iter != custom_static_particles_odom_subscribers_.end()) {
+            // Subscriber already exists, so just return with success
+            res.success = true;
+            ROS_INFO("Odom Subscriber for particle %d already exists", particle_id);
+        } else {
+            // Subscriber does not exist, create a new one
+            std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
+            ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
+                                [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) { 
+                                    this->odometryCb_custom_static_particles(odom_msg, particle_id); }
+                                );
+            custom_static_particles_odom_subscribers_[particle_id] = sub; // Add the new subscriber to the map
+
+            res.success = true; // Indicate success
+            ROS_INFO("Odom Subscriber for particle %d created", particle_id);
+        }
+
+        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()) {
+            // Subscriber already exists, so just return with success
+            res.success = true;
+            ROS_INFO("Vel Subscriber for particle %d already exists", particle_id);
+        } else {
+            // Subscriber does not exist, create a new one
+            std::string topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);
+            ros::Subscriber sub = nh_.subscribe<geometry_msgs::Twist>(topic, 10,
+                                [this, particle_id](const geometry_msgs::Twist::ConstPtr& twist_msg) { 
+                                    this->cmdVelCb_custom_static_particles(twist_msg, particle_id); }
+                                );
+            custom_static_particles_cmd_vel_subscribers_[particle_id] = sub; // Add the new subscriber to the map
+
+            res.success = true; // Indicate success
+            ROS_INFO("Vel Subscriber for particle %d created", particle_id);
+        }
+    }
+
+    return true;
+}
+
+void FabricSimulator::changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr msg)
+{
+    int particle_id = msg->particle_id;
+    bool is_dynamic = msg->is_dynamic;
+
+    try{
+        fabric_.changeParticleDynamicity(particle_id, is_dynamic);
+    } catch (const std::out_of_range &e){
+        ROS_ERROR("Error in changeParticleDynamicityCb: %s", e.what()); // Indicate failure
+        return;
+    }
+
+    // Update custom_static_particles_ accordingly
+    if (is_dynamic){
+        // Remove particle_id from custom_static_particles_ if it exists
+        auto it = std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id);
+        if (it != custom_static_particles_.end()){
+            custom_static_particles_.erase(it);
+            ROS_INFO("Particle %d set to dynamic and removed from custom_static_particles_", particle_id);
+        }
+        else{
+            ROS_INFO("Particle %d not found in custom_static_particles_", particle_id);
+        }
+    }
+    else{
+        // Add particle_id to custom_static_particles_ if not already present
+        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id) == custom_static_particles_.end()){
+            custom_static_particles_.push_back(particle_id);
+            ROS_INFO("Particle %d set to static and added to custom_static_particles_", particle_id);
+        }
+        else{
+            ROS_INFO("Particle %d already in custom_static_particles_", particle_id);
+        }
+    }
+
+    // Check if a subscriber for this particle ID exists
+    auto sub_iter = custom_static_particles_odom_subscribers_.find(particle_id);
+    auto sub_iter_cmd_vel = custom_static_particles_cmd_vel_subscribers_.find(particle_id);
+
+    if (is_dynamic){ // particle is being tried to set dynamic
+        if (sub_iter != custom_static_particles_odom_subscribers_.end()){
+            // Subscriber exists, shut it down
+            sub_iter->second.shutdown();
+            custom_static_particles_odom_subscribers_.erase(sub_iter); // Remove the subscriber from the map
+            ROS_INFO("Odom Subscriber for particle %d shut down", particle_id);
+        } else {
+            // No subscriber was found for the given ID
+            ROS_INFO("No odom subscriber found for particle %d", particle_id);
+        }
+
+        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()){
+            // Subscriber exists, shut it down
+            sub_iter_cmd_vel->second.shutdown();
+            custom_static_particles_cmd_vel_subscribers_.erase(sub_iter_cmd_vel); // Remove the subscriber from the map
+            ROS_INFO("Vel Subscriber for particle %d shut down", particle_id);
+        } else {
+            // No subscriber was found for the given ID
+            ROS_INFO("No cmd_vel subscriber found for particle %d", particle_id);
+        }
+    }
+    else{ // particle is being tried to set static
+        if (sub_iter != custom_static_particles_odom_subscribers_.end()){
+            // Subscriber already exists, so just return with success
+            ROS_INFO("Odom Subscriber for particle %d already exists", particle_id);
+        } else {
+            // Subscriber does not exist, create a new one
+            std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
+            ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
+                                                                    [this, particle_id](const nav_msgs::Odometry::ConstPtr &odom_msg)
+                                                                    { this->odometryCb_custom_static_particles(odom_msg, particle_id); });
+            custom_static_particles_odom_subscribers_[particle_id] = sub; // Add the new subscriber to the map
+            ROS_INFO("Odom Subscriber for particle %d created", particle_id);
+        }
+
+        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()){
+            // Subscriber already exists, so just return with success
+            ROS_INFO("Vel Subscriber for particle %d already exists", particle_id);
+        } else {
+            // Subscriber does not exist, create a new one
+            std::string topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);
+            ros::Subscriber sub = nh_.subscribe<geometry_msgs::Twist>(topic, 10,
+                                                                      [this, particle_id](const geometry_msgs::Twist::ConstPtr &twist_msg)
+                                                                      { this->cmdVelCb_custom_static_particles(twist_msg, particle_id); });
+            custom_static_particles_cmd_vel_subscribers_[particle_id] = sub; // Add the new subscriber to the map
+            ROS_INFO("Vel Subscriber for particle %d created", particle_id);
+        }
+    }
+}
+
+void FabricSimulator::changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr msg){
+    Real stretching_compliance = msg->data;
+    fabric_.setStretchingCompliance(stretching_compliance);
+}
+
+void FabricSimulator::changeBendingComplianceCb(const std_msgs::Float32::ConstPtr msg){
+    Real bending_compliance = msg->data;
+    fabric_.setBendingCompliance(bending_compliance);
+}
+
+// Create setStretchingCompliance service callback
+bool FabricSimulator::setFabricStretchingComplianceCallback(fabric_simulator::SetFabricStretchingCompliance::Request &req,
+                                              fabric_simulator::SetFabricStretchingCompliance::Response &res){
+    fabric_.setStretchingCompliance(req.stretching_compliance);
+    res.success = true;
+    return true;
+}
+
+// Create setBendingCompliance service callback
+bool FabricSimulator::setFabricBendingComplianceCallback(fabric_simulator::SetFabricBendingCompliance::Request &req,
+                                                fabric_simulator::SetFabricBendingCompliance::Response &res){
+    fabric_.setBendingCompliance(req.bending_compliance);
+    res.success = true;
+    return true;
+}
+
+// Create getStretchingCompliance service callback
+bool FabricSimulator::getFabricStretchingComplianceCallback(fabric_simulator::GetFabricStretchingCompliance::Request &req,
+                                              fabric_simulator::GetFabricStretchingCompliance::Response &res){
+    res.stretching_compliance = fabric_.getStretchingCompliance();
+    return true;
+}
+
+// Create getBendingCompliance service callback
+bool FabricSimulator::getFabricBendingComplianceCallback(fabric_simulator::GetFabricBendingCompliance::Request &req,
+                                                fabric_simulator::GetFabricBendingCompliance::Response &res){
+    res.bending_compliance = fabric_.getBendingCompliance();
+    return true;
+}
+
+// Create enableCollisionHandling service callback
+bool FabricSimulator::enableCollisionHandlingCallback(fabric_simulator::EnableCollisionHandling::Request &req,
+                                                   fabric_simulator::EnableCollisionHandling::Response &res){
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+
+    is_collision_handling_enabled_ = req.is_enable;
+
+    // log the message
+    if (is_collision_handling_enabled_){
+        ROS_INFO("Collision handling is enabled.");
+    }
+    else{
+        collision_handler_->resetContacts();
+        ROS_INFO("Collision handling is disabled.");
+    }
+
+    res.success = true;
+    return true;
 }
 
 pbd_object::Mesh FabricSimulator::createMeshRectangular(const std::string &name, 
@@ -943,25 +1284,50 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
     // std::chrono::high_resolution_clock::time_point start_time = high_resolution_clock::now();
     ros::Time start_time = ros::Time::now();
 
-    // Small steps implementation
-    // -------------------------------
-    for (int i = 0; i< num_steps_; i++){
-        for (int j = 0; j < num_substeps_; j++){     
-            fabric_.preSolve(sdt,gravity_);
+    // // -------------------------------
+    // // Small steps implementation
+    // for (int i = 0; i< num_steps_; i++){
+    //     for (int j = 0; j < num_substeps_; j++){     
+    //         fabric_.preSolve(sdt,gravity_);
  
+    //         // Collision Handling, detect collisions
+    //         if (is_collision_handling_enabled_){
+    //             collision_handler_->collisionDetection();  
+    //         }
+    //         collision_handler_->solveContactPositionConstraints(sdt);
+    //         fabric_.solve(sdt);
+            
+    //         fabric_.postSolve(sdt);
+
+    //         collision_handler_->solveContactVelocityConstraints(sdt);
+    //     }
+    // }
+    // // -------------------------------
+
+    // --------------------------------------------------------------
+    // Small steps (Substep XPBD) 2019 implementation 2 (CORRECT)
+    for (int i = 0; i< num_substeps_; i++){
+        fabric_.resetLambdas();
+        
+        fabric_.preSolve(sdt,gravity_);
+        
+        for (int j = 0; j < num_steps_; j++){     
+            fabric_.resetForces();
+            
             // Collision Handling, detect collisions
             if (is_collision_handling_enabled_){
                 collision_handler_->collisionDetection();  
             }
             collision_handler_->solveContactPositionConstraints(sdt);
             fabric_.solve(sdt);
-            
-            fabric_.postSolve(sdt);
-
-            collision_handler_->solveContactVelocityConstraints(sdt);
         }
+        
+        fabric_.postSolve(sdt);
+        collision_handler_->solveContactVelocityConstraints(sdt);
     }
-    // -------------------------------
+    // --------------------------------------------------------------
+    
+
 
     // // To debug force readings from hanged corners (use only when robots are not attached)
     // std::vector<int> *attached_ids_ptr = fabric_.getAttachedIdsPtr();
@@ -971,8 +1337,8 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
     // std::cout << "id: " << id << ". Force = " << for_ptr->row(id)/num_substeps_ << " N." << std::endl;
 
     // +++++++++++++++++++++++++++++++++++++++++++++++++++==
-    readAttachedRobotForces();
-    fabric_.resetForces();
+    // readAttachedRobotForces();
+    // fabric_.resetForces();
     // +++++++++++++++++++++++++++++++++++++++++++++++++++==
 
     // std::chrono::high_resolution_clock::time_point finish_time = high_resolution_clock::now();
@@ -981,9 +1347,9 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
     ros::Duration elapsed_time = finish_time - start_time;
     time_sum_ += elapsed_time.toSec();
     time_frames_ += 1;
-    if (time_frames_ > 100) {
+    if (time_frames_ > 2) {
         time_sum_ /= time_frames_;
-        ROS_INFO("[Fabric Simulator]: %-4.2lf ms per simulation iteration", time_sum_*1000);
+        ROS_INFO_THROTTLE(5, "[Fabric Simulator]: %-4.2lf ms per simulation iteration", time_sum_*1000);
         // Smart dt and simulation rate selection (debug)
         if (!is_auto_sim_rate_set_ && set_sim_rate_auto_) {
             dt_ = time_sum_;
@@ -998,40 +1364,70 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
 
 
 void FabricSimulator::render(const ros::TimerEvent& e){
+    if (fabric_visualization_mode_ == -1){
+        return;
+    }
+    
     // Lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
-    visualization_msgs::MarkerArray markerArray;
     int marker_id = 0;
-    // int fabric_visualization_mode_ = 2; // 0: Points Only, 1: Wireframe Only, 2: Mesh Only, 3: Points and Wireframe, 4: All
+    
+    // Get the pointers to the data from the fabric object
+    const Eigen::Matrix<Real,Eigen::Dynamic,3> *pos_ptr = fabric_.getPosPtr();
+    const Eigen::MatrixX2i *stretching_ids_ptr = fabric_.getStretchingIdsPtr();
+    const Eigen::MatrixX3i *face_tri_ids_ptr = fabric_.getFaceTriIdsPtr();
 
-    Eigen::Matrix<Real,Eigen::Dynamic,3> *pos_ptr = fabric_.getPosPtr();
-    Eigen::MatrixX2i *stretching_ids_ptr = fabric_.getStretchingIdsPtr();
-    Eigen::MatrixX3i *face_tri_ids_ptr = fabric_.getFaceTriIdsPtr();
+    // Call the new renderMarkers function
+    renderMarkers(pos_ptr, stretching_ids_ptr, face_tri_ids_ptr, pub_fabric_marker_array_, marker_id);
+}
+
+void FabricSimulator::renderMarkers(const Eigen::Matrix<Real,Eigen::Dynamic,3>* pos_ptr,
+                                    const Eigen::MatrixX2i* stretching_ids_ptr,
+                                    const Eigen::MatrixX3i* face_tri_ids_ptr,
+                                    ros::Publisher& publisher,
+                                    int marker_id = 0)
+{
+    if (fabric_visualization_mode_ == -1){
+        return;
+    }
+
+    visualization_msgs::MarkerArray markerArray;
+    // int fabric_visualization_mode_; 
+    // 0: Points Only, 
+    // 1: Wireframe Only,
+    // 2: Mesh Only,
+    // 3: Points and Wireframe,
+    // 4: All
 
     visualization_msgs::Marker pointsMarker, wireframeMarker, trianglesMarker;
     createRvizPointsMarker(pos_ptr, pointsMarker);
     createRvizWireframeMarker(pos_ptr, stretching_ids_ptr, wireframeMarker);
     createRvizTrianglesMarker(pos_ptr, face_tri_ids_ptr, trianglesMarker);
 
-    if (fabric_visualization_mode_ == 0 || fabric_visualization_mode_ == 3 || fabric_visualization_mode_ == 4) {
+    if (fabric_visualization_mode_ == 0 || 
+        fabric_visualization_mode_ == 3 || 
+        fabric_visualization_mode_ == 4) {
         pointsMarker.id = marker_id++;
         markerArray.markers.push_back(pointsMarker);
     }
-    if (fabric_visualization_mode_ == 1 || fabric_visualization_mode_ == 3 || fabric_visualization_mode_ == 4) {
+    if (fabric_visualization_mode_ == 1 || 
+        fabric_visualization_mode_ == 3 || 
+        fabric_visualization_mode_ == 4) {
         wireframeMarker.id = marker_id++;
         markerArray.markers.push_back(wireframeMarker);
     }
-    if (fabric_visualization_mode_ == 2 || fabric_visualization_mode_ == 4) {
+    if (fabric_visualization_mode_ == 2 || 
+        fabric_visualization_mode_ == 4) {
         trianglesMarker.id = marker_id++;
         markerArray.markers.push_back(trianglesMarker);
     }
 
-    pub_fabric_points_.publish(markerArray);
+    publisher.publish(markerArray);
 }
 
 void FabricSimulator::createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, visualization_msgs::Marker &marker){
-    marker.header.frame_id = fabric_points_frame_id_;
+    marker.header.frame_id = fabric_frame_id_;
     marker.header.stamp = ros::Time::now();
     marker.type = visualization_msgs::Marker::POINTS;
     marker.action = visualization_msgs::Marker::ADD;
@@ -1056,7 +1452,7 @@ void FabricSimulator::createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dyn
 }
 
 void FabricSimulator::createRvizWireframeMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX2i *ids, visualization_msgs::Marker &marker){
-    marker.header.frame_id = fabric_points_frame_id_;
+    marker.header.frame_id = fabric_frame_id_;
     marker.header.stamp = ros::Time::now();
     marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.action = visualization_msgs::Marker::ADD;
@@ -1087,7 +1483,7 @@ void FabricSimulator::createRvizWireframeMarker(const Eigen::Matrix<Real,Eigen::
 }
 
 void FabricSimulator::createRvizTrianglesMarker(const Eigen::Matrix<Real,Eigen::Dynamic,3> *poses, const Eigen::MatrixX3i *face_tri_ids, visualization_msgs::Marker &marker){
-    marker.header.frame_id = fabric_points_frame_id_;
+    marker.header.frame_id = fabric_frame_id_;
     marker.header.stamp = ros::Time::now();
     marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
     marker.action = visualization_msgs::Marker::ADD;
@@ -1149,9 +1545,15 @@ void FabricSimulator::publishFaceTriIds(const Eigen::MatrixX3i *ids){
 }
 
 void FabricSimulator::odometryCb_custom_static_particles(const nav_msgs::Odometry::ConstPtr& odom_msg, const int& id) {
-    // // With some kind of self lock to prevent collision with simulation
+    // With some kind of self lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
+    // Update Velocity
+    const Eigen::Matrix<Real,1,3> vel(odom_msg->twist.twist.linear.x, 
+                                        odom_msg->twist.twist.linear.y, 
+                                        odom_msg->twist.twist.linear.z);
+
+    // Update Pose
     const Real x = odom_msg->pose.pose.position.x;
     const Real y = odom_msg->pose.pose.position.y;
     const Real z = odom_msg->pose.pose.position.z + fabric_rob_z_offset_;
@@ -1164,6 +1566,7 @@ void FabricSimulator::odometryCb_custom_static_particles(const nav_msgs::Odometr
     Eigen::Matrix<Real,3,1> pos(x, y, z);
     Eigen::Quaternion<Real> ori(qw,qx,qy,qz);
 
+    fabric_.updateAttachedVelocity(id, vel);
     fabric_.updateAttachedPose(id, pos);
 }
 
@@ -1351,6 +1754,18 @@ void FabricSimulator::odometryCb_04(const nav_msgs::Odometry::ConstPtr odom_msg)
     }
 }
 
+void FabricSimulator::cmdVelCb_custom_static_particles(const geometry_msgs::Twist::ConstPtr& twist_msg, const int& id) {
+    // With some kind of self lock to prevent collision with simulation
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+
+    // Update Velocity
+    const Eigen::Matrix<Real,1,3> vel(twist_msg->linear.x, 
+                                        twist_msg->linear.y, 
+                                        twist_msg->linear.z);
+
+    fabric_.updateAttachedVelocity(id, vel);
+}
+
 void FabricSimulator::readAttachedRobotForces(){
     Eigen::Matrix<Real,Eigen::Dynamic,3> *for_ptr = fabric_.getForPtr();
 
@@ -1466,12 +1881,19 @@ void FabricSimulator::publishZeroWrenches(){
 
 // Publish message to RVIZ to visualize the rigid bodies considered in the simulation
 void FabricSimulator::renderRigidBodies(const ros::TimerEvent& e){
+    if (rb_visualization_mode_ == -1){
+        return;
+    }
+
     visualization_msgs::MarkerArray markerArray;
     marker_id_ = 0; 
 
     // int rb_visualization_mode_ = 0; // 0: Mesh Only, 1: Wireframe Only, 2: Both
 
     for (const utilities::RigidBodySceneLoader::RigidBodyData& rbd : rigid_bodies_) {
+        if (!rbd.m_isVisible) {
+            continue;
+        }
         visualization_msgs::Marker meshMarker, wireframeMarker;
         createMeshAndWireframeMarkers(&rbd.m_mesh.vertices, &rbd.m_mesh.face_tri_ids, meshMarker, wireframeMarker);
 
@@ -1521,7 +1943,7 @@ void FabricSimulator::createMeshAndWireframeMarkers(const Eigen::Matrix<Real,Eig
 }
 
 void FabricSimulator::setupMeshMarker(visualization_msgs::Marker &marker){
-    marker.header.frame_id = fabric_points_frame_id_;
+    marker.header.frame_id = fabric_frame_id_;
     marker.header.stamp = ros::Time::now();
 
     marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
@@ -1544,7 +1966,7 @@ void FabricSimulator::setupMeshMarker(visualization_msgs::Marker &marker){
 }
 
 void FabricSimulator::setupWireframeMarker(visualization_msgs::Marker &marker){
-    marker.header.frame_id = fabric_points_frame_id_;
+    marker.header.frame_id = fabric_frame_id_;
     marker.header.stamp = ros::Time::now();
 
     marker.type = visualization_msgs::Marker::LINE_LIST;
@@ -1573,7 +1995,7 @@ void FabricSimulator::drawRvizMesh_from_resource(const std::string &mesh_resourc
     // THIS FUNCTION IS NOT USED HOWEVER PUT HERE AS A FUTURE REFERENCE
     visualization_msgs::Marker m;
 
-    m.header.frame_id = fabric_points_frame_id_;
+    m.header.frame_id = fabric_frame_id_;
     m.header.stamp = ros::Time::now();
 
     m.type = visualization_msgs::Marker::MESH_RESOURCE;
@@ -1689,7 +2111,8 @@ void FabricSimulator::publishMinDistancesToRigidBodies(const ros::TimerEvent& e)
 
             msg_data.type = minDistData.m_type;
             
-            msg_data.index1 = minDistData.m_index1;
+            // msg_data.index1 = minDistData.m_index1; // index of the particle in dlo
+            msg_data.index1 = 0; // index of the dlo in the scene, when there is single dlo in the simulation, it's always 0. 
             msg_data.index2 = minDistData.m_index2;
 
             msg_data.pointOnObject1.x = minDistData.m_pointOnObject1[0];
@@ -1753,7 +2176,7 @@ void FabricSimulator::publishMinDistLineMarkers(
 }
 
 void FabricSimulator::setupMinDistLineMarker(visualization_msgs::Marker &marker){
-    marker.header.frame_id = fabric_points_frame_id_;
+    marker.header.frame_id = fabric_frame_id_;
     marker.header.stamp = ros::Time::now();
 
     marker.type = visualization_msgs::Marker::LINE_LIST;
@@ -1767,4 +2190,69 @@ void FabricSimulator::setupMinDistLineMarker(visualization_msgs::Marker &marker)
     marker.color.g = min_dist_line_marker_color_rgba_[1];
     marker.color.b = min_dist_line_marker_color_rgba_[2];
     marker.color.a = min_dist_line_marker_color_rgba_[3];
+}
+
+void FabricSimulator::publishFabricState(const ros::TimerEvent& e){
+    // With some kind of self lock to prevent collision with simulation
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+
+    fabric_simulator::SegmentStateArray states_msg;
+
+    // Set the fabric_id 
+    states_msg.fabric_id = 0;  // TODO: Replace in future with fabric_id obtaining method
+
+    const Eigen::Matrix<Real,Eigen::Dynamic,3> &pos_ptr = *fabric_.getPosPtr();
+    const Eigen::Matrix<Real,Eigen::Dynamic,3> &vel_ptr = *fabric_.getVelPtr();
+    const Eigen::Matrix<Real,Eigen::Dynamic,3> &for_ptr = *fabric_.getForPtr();
+
+    for (int i = 0; i < pos_ptr.rows(); i++) {
+        fabric_simulator::SegmentState segment_state;
+
+        // Set the segment id
+        segment_state.id = i;
+
+        // Set the header
+        segment_state.header.stamp = ros::Time::now();
+        segment_state.header.frame_id = fabric_frame_id_;
+
+        // Set pose (position and orientation)
+        // Set pose position
+        segment_state.pose.position.x = pos_ptr(i, 0);
+        segment_state.pose.position.y = pos_ptr(i, 1);
+        segment_state.pose.position.z = pos_ptr(i, 2);
+
+        // Set pose orientation (NULL)
+        segment_state.pose.orientation.x = 0.0;
+        segment_state.pose.orientation.y = 0.0;
+        segment_state.pose.orientation.z = 0.0;
+        segment_state.pose.orientation.w = 1.0;
+
+        // Set twist (linear and angular velocity)
+        // Set linear velocity
+        segment_state.twist.linear.x = vel_ptr(i, 0);
+        segment_state.twist.linear.y = vel_ptr(i, 1);
+        segment_state.twist.linear.z = vel_ptr(i, 2);
+
+        // Set angular velocity (NULL)
+        segment_state.twist.angular.x = 0.0;
+        segment_state.twist.angular.y = 0.0;
+        segment_state.twist.angular.z = 0.0;
+
+        // Set wrench (Force and Torque) 
+        // Set force
+        segment_state.wrench.force.x = for_ptr(i, 0);
+        segment_state.wrench.force.y = for_ptr(i, 1);
+        segment_state.wrench.force.z = for_ptr(i, 2);
+
+        // Set torque (NULL)
+        segment_state.wrench.torque.x = 0.0;
+        segment_state.wrench.torque.y = 0.0;
+        segment_state.wrench.torque.z = 0.0;
+
+        // Add the segment state to the message
+        states_msg.states.push_back(segment_state);
+    }
+
+    // Publish the message
+    pub_fabric_state_.publish(states_msg);
 }

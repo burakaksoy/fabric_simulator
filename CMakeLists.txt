@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(fabric_simulator)
 
+# colors, because why not :)
+string(ASCII 27 Esc)
+set(RED "${Esc}[31m")
+set(GREEN "${Esc}[32m")
+set(ENDL "${Esc}[m")
+
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release)
+endif()
+
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
@@ -10,6 +20,9 @@ set(CMAKE_CXX_FLAGS "-std=c++11 -fpermissive ${CMAKE_CXX_FLAGS} -Wfatal-errors\ 
 # set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # or
 # set(CMAKE_CXX_FLAGS "-O2 -O3 -std=c++11 -Wall")
+
+MESSAGE("${GREEN}----------------Options:-------------------${ENDL}")
+MESSAGE("${GREEN}Build type: ${CMAKE_BUILD_TYPE}${ENDL}")
 
 set(MSG_DEPS
     geometry_msgs
@@ -38,6 +51,10 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system chrono)
 find_package(Eigen3)
+
+# Print eigen3 include directory and version
+message(STATUS "Eigen3 include directory: ${EIGEN3_INCLUDE_DIR}")
+message(STATUS "Eigen3 version: ${EIGEN3_VERSION_STRING}")
 
 if(BUILD_WITH_OPENMP)
     find_package(OpenMP)
@@ -115,6 +132,9 @@ endif()
 set(MSG_FILES 
     MinDistanceData.msg
     MinDistanceDataArray.msg
+    ChangeParticleDynamicity.msg 
+    SegmentState.msg 
+    SegmentStateArray.msg
 )
 
 ## Generate messages in the 'msg' folder
@@ -124,11 +144,15 @@ add_message_files(
 )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+    FILES
+    EnableCollisionHandling.srv 
+    GetFabricBendingCompliance.srv 
+    GetFabricStretchingCompliance.srv 
+    SetFabricBendingCompliance.srv 
+    SetFabricStretchingCompliance.srv 
+    SetParticleDynamicity.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(

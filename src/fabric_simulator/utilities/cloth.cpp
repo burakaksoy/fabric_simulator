@@ -14,12 +14,14 @@ Cloth::Cloth(const Mesh &mesh,
              const Real &stretching_compliance, 
              const Real &bending_compliance, 
              const Real &density,
-             const Real &global_damp_coeff_v):
+             const Real &global_damp_coeff_v,
+             const Eigen::Matrix<Real,1,3> &gravity):
     mesh_(mesh),
     stretching_compliance_(stretching_compliance),
     bending_compliance_(bending_compliance),
     density_(density),
-    global_damp_coeff_v_(global_damp_coeff_v)
+    global_damp_coeff_v_(global_damp_coeff_v),
+    gravity_(gravity)
 {
     num_particles_ = mesh_.vertices.rows();
     std::cout << "num particles: " << num_particles_ << std::endl;
@@ -29,7 +31,7 @@ Cloth::Cloth(const Mesh &mesh,
     rest_pos_ = mesh_.vertices;
     vel_ = Eigen::Matrix<Real,Eigen::Dynamic,3>::Zero(num_particles_,3);
     inv_mass_ = Eigen::Matrix<Real,1,Eigen::Dynamic>::Zero(num_particles_);
-    
+    is_dynamic_.assign(num_particles_, true); // initially assume all particles are dynamic
     for_ = Eigen::Matrix<Real,Eigen::Dynamic,3>::Zero(num_particles_,3);
     
     grads_ = Eigen::Matrix<Real,1,3>::Zero();
@@ -38,7 +40,6 @@ Cloth::Cloth(const Mesh &mesh,
     // std::cout << "prev_pos_:\n" << prev_pos_ << std::endl;
     // std::cout << "vel_:\n" << vel_ << std::endl;
     // std::cout << "inv_mass_:\n" << inv_mass_ << std::endl;
-
     
     // Set stretching and bending constraints
     Eigen::RowVectorXi neighbors = findTriNeighbors(mesh_.face_tri_ids);
@@ -94,10 +95,9 @@ Cloth::Cloth(const Mesh &mesh,
     stretching_lengths_ = Eigen::Matrix<Real,1,Eigen::Dynamic>::Zero(stretching_ids_.rows()); //assigned at initPhysics
     bending_lengths_ = Eigen::Matrix<Real,1,Eigen::Dynamic>::Zero(bending_ids_.rows()); //assigned at initPhysics
 
-    // attached_ids_  //Initially empty vector of integers to store the ids of attached (fixed) particles.
+    // Lambda_.assign(stretching_ids_.rows(),Eigen::Matrix<Real,6,1>::Zero()); // TODO: Is lambda_ necessary?
 
-    // Not necessary? 
-    // only_once 
+    // attached_ids_  //Initially empty vector of integers to store the ids of attached (fixed) particles.
 
     initPhysics(mesh_.face_tri_ids);
 }
@@ -253,11 +253,19 @@ void Cloth::solveStretching(const Real &compliance, const Real &dt){
         int &id0 = stretching_ids_(i,0);
         int &id1 = stretching_ids_(i,1);
 
+        
         Real &w0 = inv_mass_(id0);
         Real &w1 = inv_mass_(id1);
         Real w = w0 + w1;
-
+        
         if (w == 0){
+            continue;
+        }
+
+        const bool &isDynamic0 = is_dynamic_[id0];
+        const bool &isDynamic1 = is_dynamic_[id1];
+
+        if (!isDynamic0 && !isDynamic1){
             continue;
         }
 
@@ -283,10 +291,13 @@ void Cloth::solveStretching(const Real &compliance, const Real &dt){
         Real s = -C / K; // lambda
 
         // Position corrections
-        pos_.row(id0) += s*w0*grads_;
-        pos_.row(id1) += -s*w1*grads_;
+        if (isDynamic0){
+            pos_.row(id0) += s*w0*grads_;
+        }
+        if (isDynamic1){
+            pos_.row(id1) += -s*w1*grads_;
+        }
         
-
         // Force calculation
         Real f = (s / (dt*dt)); 
         for_.row(id0) += f*grads_;
@@ -306,6 +317,13 @@ void Cloth::solveBending(const Real &compliance, const Real &dt){
         Real w = w0 + w1;
 
         if (w == 0){
+            continue;
+        }
+
+        const bool &isDynamic0 = is_dynamic_[id0];
+        const bool &isDynamic1 = is_dynamic_[id1];
+
+        if (!isDynamic0 && !isDynamic1){
             continue;
         }
 
@@ -329,12 +347,16 @@ void Cloth::solveBending(const Real &compliance, const Real &dt){
         Real s = -C / K; // lambda
 
         // Position corrections
-        pos_.row(id0) += s*w0*grads_;
-        pos_.row(id1) += -s*w1*grads_;
+        if (isDynamic0){
+            pos_.row(id0) += s*w0*grads_;
+        }
+        if (isDynamic1){
+            pos_.row(id1) += -s*w1*grads_;
+        }
     }
 }
 
-void Cloth::hangFromCorners(const int &num_corners){
+void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_static_particles_){
     // if num_corners = 0: Do not fix any corners, free fall
     // if num_corners = 1: Fix from 1 corners
     // if num_corners = 2: Fix from 2 corners
@@ -368,38 +390,72 @@ void Cloth::hangFromCorners(const int &num_corners){
             case 1:
                 if (y > max_y - eps && x > max_x - eps) {
                     std::cout << "id: " << i << " is virtually hang as corner 1." << std::endl;
-                    inv_mass_(i) = 0.0;
-                    attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector
+                    changeParticleDynamicity(i,false);
+
+                    // Check if value exists in the custom_static_particles_ vector, if not, add it
+                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                        custom_static_particles_.push_back(i);
+                    }
                 }
                 break;
             case 2:
                 if (y > max_y - eps && (x < min_x + eps || x > max_x - eps)) {
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2." << std::endl;
-                    inv_mass_(i) = 0.0;
-                    attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector
+                    changeParticleDynamicity(i,false);
+
+                    // Check if value exists in the custom_static_particles_ vector, if not, add it
+                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                        custom_static_particles_.push_back(i);
+                    }
                 }
                 break;
             case 3:
                 if ((y > max_y - eps && x < min_x + eps) || (y > max_y - eps && x > max_x - eps) || (y < min_y + eps && x > max_x - eps) ) {
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2 or 3." << std::endl;
-                    inv_mass_(i) = 0.0;
-                    attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector
+                    changeParticleDynamicity(i,false);
+
+                    // Check if value exists in the custom_static_particles_ vector, if not, add it
+                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                        custom_static_particles_.push_back(i);
+                    }
                 }
                 break;
             case 4:
                 if ((y < min_y + eps || y > max_y - eps  ) && (x < min_x + eps || x > max_x - eps)) {
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2 or 3 or 4." << std::endl;
-                    inv_mass_(i) = 0.0;
-                    attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector
+                    changeParticleDynamicity(i,false);
+
+                    // Check if value exists in the custom_static_particles_ vector, if not, add it
+                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                        custom_static_particles_.push_back(i);
+                    }
                 }
                 break;
             default:
                 if ((y < min_y + eps || y > max_y - eps  ) && (x < min_x + eps || x > max_x - eps)) {
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2 or 3 or 4." << std::endl;
-                    inv_mass_(i) = 0.0;
-                    attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector
+                    changeParticleDynamicity(i,false);
+
+                    // Check if value exists in the custom_static_particles_ vector, if not, add it
+                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                        custom_static_particles_.push_back(i);
+                    }
                 }
                 break;
+        }
+    }
+}
+
+void Cloth::changeParticleDynamicity(const int &particle, const bool &is_dynamic){
+    if(particle < 0 || particle >= is_dynamic_.size()) {
+        throw std::out_of_range("Index out of bounds");
+    }
+    if (is_dynamic_[particle] != is_dynamic){
+        is_dynamic_[particle] = is_dynamic;
+
+        if (!is_dynamic){
+            // Update Velocity to Zero when making the particle static
+            updateAttachedVelocity(particle, Eigen::Matrix<Real,1,3>::Zero());
         }
     }
 }
@@ -407,11 +463,53 @@ void Cloth::hangFromCorners(const int &num_corners){
 void Cloth::setStaticParticles(const std::vector<int> &particles){
     for (const int& i : particles)
     {
-        if (inv_mass_(i) != 0.0){
-            inv_mass_(i) = 0.0;
-            attached_ids_.push_back(i); // add fixed particle id to the attached_ids_ vector               
-        }
+        changeParticleDynamicity(i, false);
     }
+}
+
+void Cloth::setDynamicParticles(const std::vector<int> &particles){
+    for (const int& i : particles)
+    {
+        changeParticleDynamicity(i, true);
+    }
+}
+
+const bool Cloth::isStaticParticle(const int &particle) const{
+    if(particle < 0 || particle >= is_dynamic_.size()) {
+        throw std::out_of_range("Index out of bounds");
+    }
+    return !is_dynamic_[particle];
+}
+
+const bool Cloth::isDynamicParticle(const int &particle) const{
+    if(particle < 0 || particle >= is_dynamic_.size()) {
+        throw std::out_of_range("Index out of bounds");
+    }
+    return is_dynamic_[particle];
+}
+
+void Cloth::setStretchingCompliance(const Real &stretching_compliance){
+    stretching_compliance_ = stretching_compliance;
+}
+
+void Cloth::setBendingCompliance(const Real &bending_compliance){
+    bending_compliance_ = bending_compliance;
+}
+
+const Real Cloth::getStretchingCompliance(){
+    return stretching_compliance_;
+}
+
+const Real Cloth::getBendingCompliance(){
+    return bending_compliance_;
+}
+
+const Real Cloth::getDensity(){
+    return density_;
+}
+
+const Eigen::Matrix<Real,1,3> Cloth::getGravity(){
+    return gravity_;
 }
 
 void Cloth::preSolve(const Real &dt, const Eigen::Matrix<Real,1,3> &gravity){
@@ -421,18 +519,11 @@ void Cloth::preSolve(const Real &dt, const Eigen::Matrix<Real,1,3> &gravity){
         // #pragma omp for schedule(static) 
         #pragma omp parallel for 
         for (int i = 0; i< num_particles_; i++){
-            if (inv_mass_(i) > 0){
+            if (is_dynamic_[i]){
                 vel_.row(i) += gravity*dt;
+            }
                 prev_pos_.row(i) = pos_.row(i);
                 pos_.row(i) += vel_.row(i)*dt;
-
-                // // Prevent going 0.0 meters below ground
-                // Real z = pos_(i,2);
-                // if (z < -0.0){
-                //     pos_.row(i) = prev_pos_.row(i) ;
-                //     pos_(i,2) = 0.0;
-                // }
-            }
         }
     }
 }
@@ -450,7 +541,7 @@ void Cloth::postSolve(const Real &dt){
         // #pragma omp for schedule(static) 
         #pragma omp parallel for 
         for (int i = 0; i< num_particles_; i++){
-            if (inv_mass_(i) != 0){
+            if (is_dynamic_[i]){
                 vel_.row(i) = (pos_.row(i) - prev_pos_.row(i))/dt;
             }
         }
@@ -463,7 +554,7 @@ void Cloth::postSolve(const Real &dt){
         // #pragma omp for schedule(static) 
         #pragma omp parallel for 
         for (int i = 0; i< num_particles_; i++){
-            if (inv_mass_(i) != 0){
+            if (is_dynamic_[i]){
                 vel_.row(i) -= std::min(1.0, (global_damp_coeff_v_/std::sqrt(num_particles_))*dt*inv_mass_(i)) * vel_.row(i);
                 // divide damping coeff by square root of num_particles_ to get rid of the fabric area dependent damping response
             }
@@ -476,12 +567,23 @@ void Cloth::resetForces(){
     for_.setZero();
 }
 
+void Cloth::resetLambdas(){
+    // Reset the lambdas for the next iteration
+    for (auto& lambda : Lambda_) {
+        lambda.setZero();
+    }
+}
+
+void Cloth::normalizeForces(const int &num_substeps){
+    // Find the average forces of the timestep during the substep iterations
+    for_ /= num_substeps;
+}
+
 int Cloth::attachNearest(const Eigen::Matrix<Real,1,3> &pos){
     int id = findNearestPositionVectorId(pos_,pos);
     // Make that particle stationary
     if (id >= 0){
-        inv_mass_(id) = 0.0;
-        attached_ids_.push_back(id); // add fixed particle id to the attached_ids_ vector
+        changeParticleDynamicity(id,false);
     }
     return id;
 }
@@ -532,6 +634,11 @@ void Cloth::updateAttachedPoses(const std::vector<int> &ids,
     for (int i = 0; i < ids.size(); ++i) {
         updateAttachedPose(ids[i], pos+(R_ic*rel_poses[i].transpose()).transpose());
     }
+}
+
+void Cloth::updateAttachedVelocity(const int &id, 
+                                    const Eigen::Matrix<Real,1,3> &vel){
+    vel_.row(id) = vel;
 }
 
 Eigen::Matrix<Real,Eigen::Dynamic,3> *Cloth::getPosPtr(){

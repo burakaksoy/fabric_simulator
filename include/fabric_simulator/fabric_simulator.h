@@ -12,14 +12,23 @@
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/WrenchStamped.h>
+#include <geometry_msgs/Twist.h>
 #include <std_msgs/Float32.h>
 #include <std_msgs/Int32MultiArray.h>
 #include <std_msgs/Header.h>
 #include <nav_msgs/Odometry.h>
 
 #include <fabric_simulator/MinDistanceDataArray.h> 
+#include <fabric_simulator/ChangeParticleDynamicity.h> 
+#include <fabric_simulator/SegmentStateArray.h> 
 
 #include <std_srvs/Empty.h>
+#include <fabric_simulator/SetParticleDynamicity.h> // service
+#include <fabric_simulator/SetFabricStretchingCompliance.h> // service
+#include <fabric_simulator/GetFabricStretchingCompliance.h> // service
+#include <fabric_simulator/SetFabricBendingCompliance.h> // service
+#include <fabric_simulator/GetFabricBendingCompliance.h> // service
+#include <fabric_simulator/EnableCollisionHandling.h> // service
 
 #include <time.h>
 #include <math.h>
@@ -113,11 +122,19 @@ private:
     // Timer callback functions
     void simulate(const ros::TimerEvent& e);
     void render(const ros::TimerEvent& e);
+
+    void renderMarkers(const Eigen::Matrix<Real,Eigen::Dynamic,3>* pos_ptr,
+                        const Eigen::MatrixX2i* stretching_ids_ptr,
+                        const Eigen::MatrixX3i* face_tri_ids_ptr,
+                        ros::Publisher& publisher,
+                        int marker_id);
+
     void publishWrenches(const ros::TimerEvent& e);
     void publishZeroWrenches();
     void renderRigidBodies(const ros::TimerEvent& e);
 
     void publishMinDistancesToRigidBodies(const ros::TimerEvent& e);
+    void publishFabricState(const ros::TimerEvent& e);
 
     void publishMinDistLineMarkers(const std::vector<std::vector<utilities::CollisionHandler::MinDistanceData>>& min_distances_mt);
 
@@ -129,18 +146,46 @@ private:
 
     void odometryCb_custom_static_particles(const nav_msgs::Odometry::ConstPtr& odom_msg, const int& id);
 
+    void cmdVelCb_custom_static_particles(const geometry_msgs::Twist::ConstPtr& twist_msg, const int& id);
+
+    // Change Dynamicity callback function
+    void changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr change_particle_dynamicity_msg);
+
+    // Change Stretching Compliance and Bending Compliance callback functions
+    void changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr stretching_compliance_msg);
+    void changeBendingComplianceCb(const std_msgs::Float32::ConstPtr bending_compliance_msg);
+
     // Service functions
     //   void initialize() { std_srvs::Empty empt; updateParams(empt.request, empt.response); }
     bool updateParams(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
     void reset();
     void initialize() { std_srvs::Empty empt; updateParams(empt.request, empt.response); }
 
+    bool setParticleDynamicityCallback(fabric_simulator::SetParticleDynamicity::Request &req,
+        fabric_simulator::SetParticleDynamicity::Response &res);
+
+    // Create setStretchingCompliance service callback and setBendingCompliance service callback
+    bool setFabricStretchingComplianceCallback(fabric_simulator::SetFabricStretchingCompliance::Request &req,
+            fabric_simulator::SetFabricStretchingCompliance::Response &res);
+    bool setFabricBendingComplianceCallback(fabric_simulator::SetFabricBendingCompliance::Request &req,
+                    fabric_simulator::SetFabricBendingCompliance::Response &res);
+
+    // Create getStretchingCompliance service callback and getBendingCompliance service callback
+    bool getFabricStretchingComplianceCallback(fabric_simulator::GetFabricStretchingCompliance::Request &req,
+                fabric_simulator::GetFabricStretchingCompliance::Response &res);
+    bool getFabricBendingComplianceCallback(fabric_simulator::GetFabricBendingCompliance::Request &req,
+                    fabric_simulator::GetFabricBendingCompliance::Response &res);
+
+    bool enableCollisionHandlingCallback(fabric_simulator::EnableCollisionHandling::Request &req,
+                    fabric_simulator::EnableCollisionHandling::Response &res);
+
     // ROS variables---------------------------------
     ros::NodeHandle nh_;
     ros::NodeHandle nh_local_;
     boost::recursive_mutex &mtx_;
 
-    ros::Publisher pub_fabric_points_;
+    ros::Publisher pub_fabric_state_;
+    ros::Publisher pub_fabric_marker_array_;
 
     ros::Publisher pub_face_tri_ids_;
 
@@ -161,14 +206,28 @@ private:
     ros::Subscriber sub_odom_03_;
     ros::Subscriber sub_odom_04_;
 
+    ros::Subscriber sub_change_particle_dynamicity_;
+    ros::ServiceServer set_particle_dynamicity_srv_;
+
+    ros::Subscriber sub_change_stretching_compliance_;
+    ros::Subscriber sub_change_bending_compliance_;
+    ros::ServiceServer set_stretching_compliance_srv_;
+    ros::ServiceServer set_bending_compliance_srv_;
+    ros::ServiceServer get_stretching_compliance_srv_;
+    ros::ServiceServer get_bending_compliance_srv_;
+
+    ros::ServiceServer enable_collision_handling_srv_;
+
     // Map to hold particle ID and its corresponding subscriber
     std::map<int, ros::Subscriber> custom_static_particles_odom_subscribers_;
+    std::map<int, ros::Subscriber> custom_static_particles_cmd_vel_subscribers_;
 
     ros::Timer timer_render_;
     ros::Timer timer_simulate_;
     ros::Timer timer_wrench_pub_;
     ros::Timer timer_render_rb_;
     ros::Timer timer_min_dist_to_rb_pub_; // renderMinDistancesToRigidBodies
+    ros::Timer timer_fabric_state_pub_; // 
 
     // ROS Parameters
     bool p_active_;
@@ -215,6 +274,7 @@ private:
     std::vector<int> custom_static_particles_; // particle ids to set as static
 
     std::string custom_static_particles_odom_topic_prefix_;
+    std::string custom_static_particles_cmd_vel_topic_prefix_;
 
     Real global_damp_coeff_v_; 
     
@@ -223,12 +283,14 @@ private:
 
     Real wrench_pub_rate_;
     Real rendering_rb_rate_;
-    Real min_dist_to_rb_pub_rate_; // TODO
+    Real min_dist_to_rb_pub_rate_; 
+    Real fabric_state_pub_rate_; 
 
     std::string rb_scene_config_path_;
 
-    std::string fabric_points_topic_name_;
-    std::string fabric_points_frame_id_;
+    std::string fabric_state_topic_name_;
+    std::string fabric_markers_topic_name_;
+    std::string fabric_frame_id_;
 
     std::string face_tri_ids_topic_name_;
 
@@ -249,6 +311,18 @@ private:
 
     std::string min_dist_to_rb_topic_name_;
     std::string min_dist_markers_topic_name_;
+
+    std::string change_particle_dynamicity_topic_name_;
+    std::string set_particle_dynamicity_service_name_;
+
+    std::string set_fabric_stretching_compliance_service_name_;
+    std::string set_fabric_bending_compliance_service_name_;
+    std::string get_fabric_stretching_compliance_service_name_;
+    std::string get_fabric_bending_compliance_service_name_;
+    std::string change_fabric_stretching_compliance_topic_name_;
+    std::string change_fabric_bending_compliance_topic_name_;
+
+    std::string enable_collision_handling_service_name_;
     
     Real fabric_rob_z_offset_; // Additional  attachment height to robots
 

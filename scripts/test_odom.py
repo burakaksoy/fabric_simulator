@@ -8,12 +8,13 @@ def publish_odometry(publishers_count):
     rospy.init_node('custom_odom_publisher', anonymous=True)
 
     # Specific numbers for each publisher
-    pub_numbers = [0,30,930,960]
+    # pub_numbers = [0,30,930,960]
+    pub_numbers = [  0,15,352,367]
 
     # Creating only the specified number of publishers
     pubs = [rospy.Publisher(f'/custom_static_particles_odom_{pub_numbers[i]}', Odometry, queue_size=1) 
             for i in range(publishers_count)]
-    rate = rospy.Rate(10)  # 10 Hz
+    rate = rospy.Rate(100)  # 10 Hz
 
     # Different starting positions for each publisher
     positions = [

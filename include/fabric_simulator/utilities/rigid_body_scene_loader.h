@@ -50,6 +50,8 @@ namespace utilities
 			GridPtr m_discregrid_ptr;
 
 			nlohmann::json m_json;
+
+			bool m_isVisible;
 		};
 
 		virtual ~RigidBodySceneLoader() {}

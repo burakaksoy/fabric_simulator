@@ -321,9 +321,9 @@ class FabricSimulator():
         rospy.init_node('fabric_sim_node', anonymous=True)
         self.sim_lock = threading.Lock()
 
-        self.fabric_points_topic_name = rospy.get_param('~cloth_points_topic_name', "cloth_points")
+        self.fabric_markers_topic_name = rospy.get_param('~fabric_markers_topic_name', "fabric_markers")
 
-        self.pub_fabric_points = rospy.Publisher(self.fabric_points_topic_name, visualization_msgs.msg.Marker, queue_size=1)
+        self.pub_fabric_points = rospy.Publisher(self.fabric_markers_topic_name, visualization_msgs.msg.Marker, queue_size=1)
 
 
         # Physics scene parameters

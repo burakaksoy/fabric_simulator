@@ -12,7 +12,7 @@ int8 type
 uint32 index1 # fabric index, when there is single fabric in the simulation, it's always 0.
 uint32 index2 # rigid body index
 
-# Points on the objects
+# Points on the objects in world frame
 geometry_msgs/Point pointOnObject1 # point on the fabric
 geometry_msgs/Point pointOnObject2 # point on the rigid body
 

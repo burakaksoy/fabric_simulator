@@ -668,14 +668,14 @@ bool CollisionHandler::RigidBodyContactConstraint::initConstraint(
 	// TODO: When the rigid bodies are dynamic, this may need to be handled differently!!!!
 
 	// return PositionBasedRigidBodyDynamics::init_RigidBodyContactConstraint(
-	// rb1.getInvMass(),				 // const Real invMass1,								// inverse mass is zero if body is static
+	// rb1.getInvMass(),				 // const Real invMass1,								
 	// rb1.getPosition(),				 // const Eigen::Matrix<Real, 3, 1> &x1,				// center of mass of body 1
 	// rb1.getVelocity(),				 // const Eigen::Matrix<Real, 3, 1> &v1,				// velocity of body 1
 	// rb1.getInertiaTensorInverseW(),	 // const Eigen::Matrix<Real, 3, 3> &inertiaInverseW1,	// inverse inertia tensor (world space) of body 1
 	// rb1.getRotation(),				 // const Eigen::Quaternion<Real> &q1,					// rotation of body 1	
 	// rb1.getAngularVelocity(),		 // const Eigen::Matrix<Real, 3, 1> &omega1,			// angular velocity of body 1
 	
-	// rb2.getInvMass(),				 // const Real invMass2,							    // inverse mass is zero if body is static
+	// rb2.getInvMass(),				 // const Real invMass2,							    
 	// rb2.getPosition(),				 // const Eigen::Matrix<Real, 3, 1> &x2,				// center of mass of body 2
 	// rb2.getVelocity(),				 // const Eigen::Matrix<Real, 3, 1> &v2,				// velocity of body 2
 	// rb2.getInertiaTensorInverseW(),	 // const Eigen::Matrix<Real, 3, 3> &inertiaInverseW2,	// inverse inertia tensor (world space) of body 2
@@ -697,6 +697,7 @@ bool CollisionHandler::RigidBodyContactConstraint::initConstraint(
 	// 2,4: goal velocity in normal direction after collision
 
 	// Set the needed parameters for STATIC (NON-DYNAMIC) rigid bodies
+	const bool &isDynamic1 = rb1.m_isDynamic;
 	const Real invMass1 = 0.0;
 	const Eigen::Matrix<Real, 3, 1> &x1 = rb1.m_x.transpose();
 	const Eigen::Matrix<Real, 3, 1> v1 = Eigen::Matrix<Real, 3, 1>::Zero();              // Set zero on initialization
@@ -704,6 +705,7 @@ bool CollisionHandler::RigidBodyContactConstraint::initConstraint(
 	// const Eigen::Quaternion<Real> &q1 = rb1.m_q;
 	const Eigen::Matrix<Real, 3, 1> omega1 = Eigen::Matrix<Real, 3, 1>::Zero();          // Set zero on initialization
 
+	const bool &isDynamic2 = rb2.m_isDynamic;
 	const Real invMass2 = 0.0;
 	const Eigen::Matrix<Real, 3, 1> &x2 = rb2.m_x.transpose();
 	const Eigen::Matrix<Real, 3, 1> v2 = Eigen::Matrix<Real, 3, 1>::Zero();              // Set zero on initialization
@@ -735,8 +737,10 @@ bool CollisionHandler::RigidBodyContactConstraint::initConstraint(
 
 	// determine K matrix
 	Eigen::Matrix<Real, 3, 3> K1, K2;
-	CollisionHandler::computeMatrixK(cp1, invMass1, x1, inertiaInverseW1, K1);
-	CollisionHandler::computeMatrixK(cp2, invMass2, x2, inertiaInverseW2, K2);
+	if (isDynamic1){ CollisionHandler::computeMatrixK(cp1, invMass1, x1, inertiaInverseW1, K1);}
+	else{K1.setZero();}
+	if (isDynamic2){ CollisionHandler::computeMatrixK(cp2, invMass2, x2, inertiaInverseW2, K2);}
+	else{K2.setZero();}
 	Eigen::Matrix<Real, 3, 3> K = K1 + K2;
 
 	m_constraintInfo(0, 4) = static_cast<Real>(1.0) / (normal.dot(K*normal));
@@ -811,11 +815,11 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::initConstraint(
 	// TODO: When the rigid bodies are dynamic, this may need to be handled differently!
 
 	// return PositionBasedRigidBodyDynamics::init_ParticleRigidBodyContactConstraint(
-	// pd.getInvMass(particleIndex),	// const Real invMass1,							 		// inverse mass is zero if body is static
+	// pd.getInvMass(particleIndex),	// const Real invMass1,							 		
 	// pd.getPosition(particleIndex),	// const Eigen::Matrix<Real, 3, 1> &x1,					// center of mass of body 1
 	// pd.getVelocity(particleIndex),	// const Eigen::Matrix<Real, 3, 1> &v1,					// velocity of body 1
 	
-	// rb.getInvMass(),					// const Real invMass2,									// inverse mass is zero if body is static
+	// rb.getInvMass(),					// const Real invMass2,									
 	// rb.getPosition(),				// const Eigen::Matrix<Real, 3, 1> &x2,					// center of mass of body 2
 	// rb.getVelocity(),				// const Eigen::Matrix<Real, 3, 1> &v2,					// velocity of body 2
 	// rb.getInertiaTensorInverseW(),	// const Eigen::Matrix<Real, 3, 3> &inertiaInverseW2,	// inverse inertia tensor (world space) of body 2
@@ -837,11 +841,13 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::initConstraint(
 	// 2,4: goal velocity in normal direction after collision
 
 	// Set the needed parameters for DYNAMIC FABRIC
+	const bool &isDynamic1 = fabric_.isDynamicParticle(m_bodies[0]);
 	const Real invMass1 = (*inv_mass_ptr)(m_bodies[0]); 
 	const Eigen::Matrix<Real, 3, 1> &x1 = pos_ptr->row(m_bodies[0]).transpose();
 	const Eigen::Matrix<Real, 3, 1> &v1 = vel_ptr->row(m_bodies[0]).transpose();
 
 	// Set the needed parameters for STATIC (NON-DYNAMIC) the rigid body (note that the fabric is dynamic)
+	const bool &isDynamic2 = rb.m_isDynamic;
 	const Real invMass2 = 0.0;
 	const Eigen::Matrix<Real, 3, 1> &x2 = rb.m_x.transpose();
 	const Eigen::Matrix<Real, 3, 1> v2 = Eigen::Matrix<Real, 3, 1>::Zero();              // Set zero on initialization
@@ -870,8 +876,10 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::initConstraint(
 
 	// determine K matrix
 	Eigen::Matrix<Real, 3, 3> K;
-	CollisionHandler::computeMatrixK(cp2, invMass2, x2, inertiaInverseW2, K);
-	if (invMass1 != 0.0)
+	if (isDynamic2){ CollisionHandler::computeMatrixK(cp2, invMass2, x2, inertiaInverseW2, K);}
+	else {K.setZero();}
+
+	if (isDynamic1)
 	{
 		K(0, 0) += invMass1;
 		K(1, 1) += invMass1;
@@ -906,11 +914,13 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solvePositionConstrai
 	RigidBodySceneLoader::RigidBodyData &rb = rigid_bodies_[m_bodies[1]];
 
 	// Set the needed parameters for DYNAMIC FABRIC
+	const bool &isDynamic1 = fabric_.isDynamicParticle(m_bodies[0]);
 	const Real invMass1 = (*inv_mass_ptr)(m_bodies[0]); 
 	const Eigen::Matrix<Real, 3, 1> &x1 = pos_ptr->row(m_bodies[0]).transpose();
 	const Eigen::Matrix<Real, 3, 1> &x1_prev = prev_pos_ptr->row(m_bodies[0]).transpose();
 
 	// Set the needed parameters for STATIC (NON-DYNAMIC) the rigid body (note that the fabric is dynamic)
+	const bool &isDynamic2 = rb.m_isDynamic;
 	const Real invMass2 = 0.0;
 	const Eigen::Matrix<Real, 3, 1> &x2 = rb.m_x.transpose();
 	const Eigen::Matrix<Real, 3, 1> &x2_prev = x2;
@@ -926,7 +936,7 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solvePositionConstrai
 	// Eigen::Matrix<Real, 3, 1> corr_q2; // orientation correction for the rigid body
 
 	// If both the particle and the rigid body is static, return, there is nothing to correct
-	if ((invMass1 == 0.0) && (invMass2 == 0.0))
+	if ((!isDynamic1) && (!isDynamic2))
 		return false;
 
 	Real m_contactCompliance = 0.0; // You can also Get this as a parameter, but always zero makes sense.
@@ -974,7 +984,7 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solvePositionConstrai
 	// m_lambda_t = -delta_x.dot(tangent) * (1.0 / ( (1.0/nKn_inv) + alpha ));
 
 
-	if (invMass1 != 0.0)
+	if (isDynamic1)
 	{
 		// Normal Direction Correction
 		corr_x1 = invMass1*m_lambda_n*normal;
@@ -985,7 +995,7 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solvePositionConstrai
 			corr_x1 += -delta_x_tangent;// cancel out the tangential movement s
 	}
 
-	if (invMass2 != 0.0)
+	if (isDynamic2)
 	{
 		// NO CORRECTION FOR THE RIGID BODY because it is STATIC
 		// corr_x2 = TODO;
@@ -993,10 +1003,10 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solvePositionConstrai
 	}
 	
 	// Apply the corrections
-	if (invMass1 != 0.0){
+	if (isDynamic1){
 		pos_ptr->row(m_bodies[0]) += corr_x1.transpose(); 
 	}
-	if (invMass2 != 0.0){
+	if (isDynamic2){
 		// NO CORRECTION FOR THE RIGID BODY because it is STATIC
 		// rb.getPosition() += corr_x2;
 		// rb.getOrientation() += corr_q2;
@@ -1016,11 +1026,13 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solveVelocityConstrai
 	RigidBodySceneLoader::RigidBodyData &rb = rigid_bodies_[m_bodies[1]];
 
 	// Set the needed parameters for DYNAMIC FABRIC
+	const bool &isDynamic1 = fabric_.isDynamicParticle(m_bodies[0]);
 	const Real invMass1 = (*inv_mass_ptr)(m_bodies[0]); 
 	const Eigen::Matrix<Real, 3, 1> &x1 = pos_ptr->row(m_bodies[0]).transpose();
 	const Eigen::Matrix<Real, 3, 1> &v1 = vel_ptr->row(m_bodies[0]).transpose();
 
 	// Set the needed parameters for STATIC (NON-DYNAMIC) the rigid body (note that the fabric is dynamic)
+	const bool &isDynamic2 = rb.m_isDynamic;
 	const Real invMass2 = 0.0;
 	const Eigen::Matrix<Real, 3, 1> &x2 = rb.m_x.transpose();
 	const Eigen::Matrix<Real, 3, 1> v2 = Eigen::Matrix<Real, 3, 1>::Zero();              // Set zero on initialization
@@ -1036,7 +1048,7 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solveVelocityConstrai
 	Eigen::Matrix<Real, 3, 1> corr_omega2;
 
 	// If both the particle and the rigid body is static, return, there is nothing to correct
-	if ((invMass1 == 0.0) && (invMass2 == 0.0))
+	if ((!isDynamic1) && (!isDynamic2))
 		return false;
 
 	// Calculate the corrections
@@ -1101,7 +1113,7 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solveVelocityConstrai
 	Eigen::Matrix<Real, 3, 1> p_t(-correctionMagnitude_t * tangent);
 	//---------------------------------------------------
 
-	if (invMass1 != 0.0)
+	if (isDynamic1)
 	{
 		// Normal direction correction
 		corr_v1 = invMass1*p_n;		
@@ -1110,7 +1122,7 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solveVelocityConstrai
 		corr_v1 += invMass1*p_t;		
 	}
 
-	if (invMass2 != 0.0)
+	if (isDynamic2)
 	{
 		// NO CORRECTION FOR THE RIGID BODY because it is STATIC
 		// corr_v2 = -invMass2*p;
@@ -1118,10 +1130,10 @@ bool CollisionHandler::ParticleRigidBodyContactConstraint::solveVelocityConstrai
 	}
 	
 	// Apply the corrections
-	if (invMass1 != 0.0){
+	if (isDynamic1){
 		vel_ptr->row(m_bodies[0]) += corr_v1.transpose(); 
 	}
-	if (invMass2 != 0.0){
+	if (isDynamic2){
 		// NO CORRECTION FOR THE RIGID BODY because it is STATIC
 		// rb.getVelocity() += corr_v2;
 		// rb.getAngularVelocity() += corr_omega2;

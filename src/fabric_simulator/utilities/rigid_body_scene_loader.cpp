@@ -118,6 +118,10 @@ void RigidBodySceneLoader::readRigidBodies(const nlohmann::json &j, const std::s
 			readValue(rigidBody, "invertSDF", rbd.m_invertSDF);
 			
 			rbd.m_json = rigidBody;
+
+			//Visibility
+			rbd.m_isVisible = true;
+			readValue(rigidBody, "isVisible", rbd.m_isVisible);
 		}
 	}
 }
