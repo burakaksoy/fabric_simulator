@@ -192,6 +192,9 @@ class TestGUI(qt_widgets.QWidget):
             # Create QHBoxLayout for each row
             row_layout = qt_widgets.QHBoxLayout()
 
+            # ------------------------------------------------------------------------------------
+            # Create components common to all particles (self.binded_particles and custom static particles)
+            
             # Add manual control button for velocity commands to particles 
             manual_control_button = qt_widgets.QPushButton()
             manual_control_button.setText("Manually Control " + str(particle))
@@ -202,10 +205,8 @@ class TestGUI(qt_widgets.QWidget):
 
             self.buttons_manual[particle] = manual_control_button
 
-            # ------------------------------------------------
             # Add a separator vertical line here
             self.add_vertical_line_to_layout(row_layout)
-            # ------------------------------------------------
 
             # Add button to get current pose to GUI for easy set position and orientation operations
             get_pose_button = qt_widgets.QPushButton()
@@ -213,10 +214,8 @@ class TestGUI(qt_widgets.QWidget):
             get_pose_button.clicked.connect(lambda _, p=particle: self.get_pose_button_pressed_cb(p))
             row_layout.addWidget(get_pose_button)
 
-            # ------------------------------------------------
             # Add a separator vertical line here
             self.add_vertical_line_to_layout(row_layout)
-            # ------------------------------------------------
 
             # Create LineEdits and Add to row layout
             self.text_inputs_pos[particle] = {}
@@ -271,12 +270,12 @@ class TestGUI(qt_widgets.QWidget):
                 # set_ori_button.clicked.connect(lambda _, p=particle: self.set_orientation_cb_basic(p))
                 set_ori_button.clicked.connect(lambda _, p=particle: self.set_orientation_cb(p))
                 row_layout.addWidget(set_ori_button)
+            # ------------------------------------------------------------------------------------
 
-            # ------------------------------------------------
             # Add a separator vertical line here
             self.add_vertical_line_to_layout(row_layout)
-            # ------------------------------------------------
 
+            # ------------------------------------------------------------------------------------
             # Create Buttons dedicated to the binded particles
             if particle in self.binded_particles: 
                 # Send a binded particle to the centroid of the custom static particles
@@ -284,27 +283,60 @@ class TestGUI(qt_widgets.QWidget):
                 send_to_centroid_button.setText("Send to Center")
                 send_to_centroid_button.clicked.connect(lambda _, p=particle: self.send_to_centroid_cb(p))
                 row_layout.addWidget(send_to_centroid_button)
+                
+                # Create a vertical line here
+                self.add_vertical_line_to_layout(row_layout)
+                
+                # Create Attach hand to fabric button
+                attach_to_fabric_button = qt_widgets.QPushButton()
+                attach_to_fabric_button.setText("Attach to Fabric")
+                attach_to_fabric_button.clicked.connect(lambda _, p=particle: self.attach_to_fabric_cb(p))
+                row_layout.addWidget(attach_to_fabric_button)
+                
+                # Create Detach hand from fabric button
+                detach_from_fabric_button = qt_widgets.QPushButton()
+                detach_from_fabric_button.setText("Detach from Fabric")
+                detach_from_fabric_button.clicked.connect(lambda _, p=particle: self.detach_from_fabric_cb(p))
+                row_layout.addWidget(detach_from_fabric_button)
+                
+                # Create a vertical line here
+                self.add_vertical_line_to_layout(row_layout)
+                
+                # Create Stick (object to mandrel) button
+                stick_button = qt_widgets.QPushButton()
+                stick_button.setText("Stick")
+                stick_button.clicked.connect(lambda _, p=particle: self.stick_cb(p))
+                row_layout.addWidget(stick_button)
+                
+                # Create Unstick (object from mandrel) button
+                unstick_button = qt_widgets.QPushButton()
+                unstick_button.setText("Unstick")
+                unstick_button.clicked.connect(lambda _, p=particle: self.unstick_cb(p))
+                row_layout.addWidget(unstick_button)
+                
+            # ------------------------------------------------------------------------------------
 
-            # Create Reset fabric positions button
+            # ------------------------------------------------------------------------------------
+            # Create Buttons dedicated to the custom static particles
             if particle in self.custom_static_particles:
+                # Create Reset fabric positions button
                 reset_button = qt_widgets.QPushButton()
                 reset_button.setText("Reset Controller Position")
                 reset_button.setEnabled(False)  # Disable the button
                 row_layout.addWidget(reset_button)
 
-            # Create Make Dynamic Button
-            if particle in self.custom_static_particles:
+                # Create Make Dynamic Button
                 make_dynamic_button = qt_widgets.QPushButton()
                 make_dynamic_button.setText("Make Dynamic")
                 make_dynamic_button.clicked.connect(lambda _, p=particle: self.change_dynamicity_cb(p, True))
                 row_layout.addWidget(make_dynamic_button)
 
-            # Create Make Static Button
-            if particle in self.custom_static_particles:
+                # Create Make Static Button
                 make_static_button = qt_widgets.QPushButton()
                 make_static_button.setText("Make Static")
                 make_static_button.clicked.connect(lambda _, p=particle: self.change_dynamicity_cb(p, False))
                 row_layout.addWidget(make_static_button)
+            # ------------------------------------------------------------------------------------
 
             # Add row layout to the main layout
             self.layout.addLayout(row_layout)
@@ -324,72 +356,131 @@ class TestGUI(qt_widgets.QWidget):
         self.shutdown_timer.start(1000)  # Timer triggers every 1000 ms (1 second)
 
     def add_sim_controls(self):
-        # Create a horizontal layout for the Compliance controls
-        compliance_layout = qt_widgets.QHBoxLayout()
+        if self.is_orientation_control_enabled:
+            # Original horizontal layout when orientation control is enabled
+            compliance_layout = qt_widgets.QHBoxLayout()
 
-        # Create 'Get Stretching Compliance' button
-        get_stretching_compliance_button = qt_widgets.QPushButton()
-        get_stretching_compliance_button.setText("Get Stretching Compliance")
-        get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
-        compliance_layout.addWidget(get_stretching_compliance_button)
+            # Stretching Compliance Controls
+            get_stretching_compliance_button = qt_widgets.QPushButton("Get Stretching Compliance")
+            get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
+            compliance_layout.addWidget(get_stretching_compliance_button)
 
-        # Create text field for displaying Stretching Compliance with label
-        stretching_compliance_label = qt_widgets.QLabel("Stretching Compliance:")
-        compliance_layout.addWidget(stretching_compliance_label)
+            stretching_compliance_label = qt_widgets.QLabel("Stretching Compliance:")
+            compliance_layout.addWidget(stretching_compliance_label)
 
-        self.stretching_compliance_text_input = qt_widgets.QLineEdit()
-        self.stretching_compliance_text_input.setPlaceholderText("Stretching Compliance")
-        self.stretching_compliance_text_input.setMinimumWidth(100)
-        compliance_layout.addWidget(self.stretching_compliance_text_input)
+            self.stretching_compliance_text_input = qt_widgets.QLineEdit()
+            self.stretching_compliance_text_input.setPlaceholderText("Stretching Compliance")
+            self.stretching_compliance_text_input.setMinimumWidth(100)
+            compliance_layout.addWidget(self.stretching_compliance_text_input)
 
-        # Create 'Set Stretching Compliance' button
-        set_stretching_compliance_button = qt_widgets.QPushButton()
-        set_stretching_compliance_button.setText("Set Stretching Compliance")
-        set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
-        compliance_layout.addWidget(set_stretching_compliance_button)
+            set_stretching_compliance_button = qt_widgets.QPushButton("Set Stretching Compliance")
+            set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
+            compliance_layout.addWidget(set_stretching_compliance_button)
 
-        # Separator
-        self.add_vertical_line_to_layout(compliance_layout)
+            self.add_vertical_line_to_layout(compliance_layout)
 
-        # Create 'Get Bending Compliance' button
-        get_bending_compliance_button = qt_widgets.QPushButton()
-        get_bending_compliance_button.setText("Get Bending Compliance")
-        get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
-        compliance_layout.addWidget(get_bending_compliance_button)
+            # Bending Compliance Controls
+            get_bending_compliance_button = qt_widgets.QPushButton("Get Bending Compliance")
+            get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
+            compliance_layout.addWidget(get_bending_compliance_button)
 
-        # Create text field for displaying Bending Compliance with label
-        bending_compliance_label = qt_widgets.QLabel("Bending Compliance:")
-        compliance_layout.addWidget(bending_compliance_label)
+            bending_compliance_label = qt_widgets.QLabel("Bending Compliance:")
+            compliance_layout.addWidget(bending_compliance_label)
 
-        self.bending_compliance_text_input = qt_widgets.QLineEdit()
-        self.bending_compliance_text_input.setPlaceholderText("Bending Compliance")
-        self.bending_compliance_text_input.setMinimumWidth(100)
-        compliance_layout.addWidget(self.bending_compliance_text_input)
+            self.bending_compliance_text_input = qt_widgets.QLineEdit()
+            self.bending_compliance_text_input.setPlaceholderText("Bending Compliance")
+            self.bending_compliance_text_input.setMinimumWidth(100)
+            compliance_layout.addWidget(self.bending_compliance_text_input)
 
-        # Create 'Set Bending Compliance' button
-        set_bending_compliance_button = qt_widgets.QPushButton()
-        set_bending_compliance_button.setText("Set Bending Compliance")
-        set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
-        compliance_layout.addWidget(set_bending_compliance_button)
+            set_bending_compliance_button = qt_widgets.QPushButton("Set Bending Compliance")
+            set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
+            compliance_layout.addWidget(set_bending_compliance_button)
+
+            self.add_vertical_line_to_layout(compliance_layout)
+            
+            # Collision Handling Controls
+            enable_collision_button = qt_widgets.QPushButton("Enable Collision Handling")
+            enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
+            compliance_layout.addWidget(enable_collision_button)
+
+            disable_collision_button = qt_widgets.QPushButton("Disable Collision Handling")
+            disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
+            compliance_layout.addWidget(disable_collision_button)
+
+            # Add the horizontal compliance_layout to the main layout
+            self.layout.addLayout(compliance_layout)
+        else:
+            # Orientation control disabled:
+            # Create a two-column layout with a vertical line separator in between.
+
+            # Main horizontal layout that will hold both columns and the separator
+            main_layout = qt_widgets.QHBoxLayout()
+
+            # Left column: Compliance controls in a vertical layout
+            compliance_layout = qt_widgets.QVBoxLayout()
+
+            # Row 1: Stretching Compliance Controls (arranged horizontally)
+            stretching_layout = qt_widgets.QHBoxLayout()
+            get_stretching_compliance_button = qt_widgets.QPushButton("Get Stretching Compliance")
+            get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
+            stretching_layout.addWidget(get_stretching_compliance_button)
+
+            stretching_compliance_label = qt_widgets.QLabel("Stretching Compliance:")
+            stretching_layout.addWidget(stretching_compliance_label)
+
+            self.stretching_compliance_text_input = qt_widgets.QLineEdit()
+            self.stretching_compliance_text_input.setPlaceholderText("Stretching Compliance")
+            self.stretching_compliance_text_input.setMinimumWidth(100)
+            stretching_layout.addWidget(self.stretching_compliance_text_input)
+
+            set_stretching_compliance_button = qt_widgets.QPushButton("Set Stretching Compliance")
+            set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
+            stretching_layout.addWidget(set_stretching_compliance_button)
+
+            compliance_layout.addLayout(stretching_layout)
+
+            # Row 2: Bending Compliance Controls (arranged horizontally)
+            bending_layout = qt_widgets.QHBoxLayout()
+            get_bending_compliance_button = qt_widgets.QPushButton("Get Bending Compliance")
+            get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
+            bending_layout.addWidget(get_bending_compliance_button)
+
+            bending_compliance_label = qt_widgets.QLabel("Bending Compliance:")
+            bending_layout.addWidget(bending_compliance_label)
+
+            self.bending_compliance_text_input = qt_widgets.QLineEdit()
+            self.bending_compliance_text_input.setPlaceholderText("Bending Compliance")
+            self.bending_compliance_text_input.setMinimumWidth(100)
+            bending_layout.addWidget(self.bending_compliance_text_input)
+
+            set_bending_compliance_button = qt_widgets.QPushButton("Set Bending Compliance")
+            set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
+            bending_layout.addWidget(set_bending_compliance_button)
+
+            compliance_layout.addLayout(bending_layout)
+
+            # Right column: Collision Handling Controls in a vertical layout
+            collision_layout = qt_widgets.QVBoxLayout()
+            enable_collision_button = qt_widgets.QPushButton("Enable Collision Handling")
+            enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
+            collision_layout.addWidget(enable_collision_button)
+
+            disable_collision_button = qt_widgets.QPushButton("Disable Collision Handling")
+            disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
+            collision_layout.addWidget(disable_collision_button)
+
+            # Add left column to the main layout
+            main_layout.addLayout(compliance_layout)
+
+            # Add vertical line separator that spans the height of both rows
+            self.add_vertical_line_to_layout(main_layout)
+
+            # Add right column to the main layout
+            main_layout.addLayout(collision_layout)
+
+            # Add the complete two-column layout to the overall layout
+            self.layout.addLayout(main_layout)
         
-        # Separator
-        self.add_vertical_line_to_layout(compliance_layout)
-        
-        # Create 'Enable Collision Handling' button
-        enable_collision_button = qt_widgets.QPushButton()
-        enable_collision_button.setText("Enable Collision Handling")
-        enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
-        compliance_layout.addWidget(enable_collision_button)
-
-        # Create 'Disable Collision Handling' button
-        disable_collision_button = qt_widgets.QPushButton()
-        disable_collision_button.setText("Disable Collision Handling")
-        disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
-        compliance_layout.addWidget(disable_collision_button)
-
-        # Add the compliance_layout to the main layout at the top
-        self.layout.addLayout(compliance_layout)
-
     def get_stretching_compliance_button_pressed_cb(self):
         try:
             # Call the get_stretching_compliance service
