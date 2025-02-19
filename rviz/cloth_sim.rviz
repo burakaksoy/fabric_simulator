@@ -6,11 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /MarkerArray1
-        - /MarkerArray2
-        - /MarkerArray3
-        - /Group-Odometry1
-        - /Odometry-hand11
+        - /Group-Odom-hands1
       Splitter Ratio: 0.5
     Tree Height: 1790
   - Class: rviz/Selection
@@ -69,7 +65,7 @@ Visualization Manager:
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /fabric_markers
-      Name: MarkerArray
+      Name: MarkerArray-Fabric
       Namespaces:
         "": true
       Queue Size: 100
@@ -77,7 +73,7 @@ Visualization Manager:
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /rigid_body_markers
-      Name: MarkerArray
+      Name: MarkerArray-RigidBodies
       Namespaces:
         "": true
       Queue Size: 100
@@ -85,7 +81,7 @@ Visualization Manager:
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /min_dist_markers
-      Name: MarkerArray
+      Name: MarkerArray-Min-Dist
       Namespaces:
         "": true
       Queue Size: 100
@@ -233,42 +229,81 @@ Visualization Manager:
           Unreliable: false
           Value: true
       Enabled: true
-      Name: Group-Odometry
-    - Angle Tolerance: 1
-      Class: rviz/Odometry
-      Covariance:
-        Orientation:
-          Alpha: 0.5
-          Color: 255; 255; 127
-          Color Style: Unique
-          Frame: Local
-          Offset: 1
-          Scale: 1
+      Name: Group-Odom-Fabric-Particles
+    - Class: rviz/Group
+      Displays:
+        - Angle Tolerance: 1
+          Class: rviz/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: false
+          Enabled: true
+          Keep: 1
+          Name: Odometry-hand-1
+          Position Tolerance: 0.009999999776482582
+          Queue Size: 9
+          Shape:
+            Alpha: 1
+            Axes Length: 0.10000000149011612
+            Axes Radius: 0.019999999552965164
+            Color: 255; 25; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Axes
+          Topic: /odom_hand_1
+          Unreliable: false
           Value: true
-        Position:
-          Alpha: 0.30000001192092896
-          Color: 204; 51; 204
-          Scale: 1
+        - Angle Tolerance: 1
+          Class: rviz/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: false
+          Enabled: true
+          Keep: 1
+          Name: Odometry-hand-2
+          Position Tolerance: 0.009999999776482582
+          Queue Size: 9
+          Shape:
+            Alpha: 1
+            Axes Length: 0.10000000149011612
+            Axes Radius: 0.019999999552965164
+            Color: 255; 25; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Axes
+          Topic: /odom_hand_2
+          Unreliable: false
           Value: true
-        Value: false
       Enabled: true
-      Keep: 1
-      Name: Odometry-hand1
-      Position Tolerance: 0.10000000149011612
-      Queue Size: 9
-      Shape:
-        Alpha: 1
-        Axes Length: 0.15000000596046448
-        Axes Radius: 0.029999999329447746
-        Color: 255; 25; 0
-        Head Length: 0.30000001192092896
-        Head Radius: 0.10000000149011612
-        Shaft Length: 1
-        Shaft Radius: 0.05000000074505806
-        Value: Axes
-      Topic: /odom_leader
-      Unreliable: false
-      Value: true
+      Name: Group-Odom-hands
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -297,7 +332,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 6.3219380378723145
+      Distance: 6.414305686950684
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -305,17 +340,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.512017011642456
-        Y: 2.614307403564453
-        Z: -0.07950594276189804
+        X: 1.3629124164581299
+        Y: 1.7165004014968872
+        Z: -0.7891344428062439
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7453994154930115
+      Pitch: 0.8503994941711426
       Target Frame: <Fixed Frame>
-      Yaw: 1.0013360977172852
+      Yaw: 1.0213388204574585
     Saved:
       - Class: rviz/Orbit
         Distance: 4.851423263549805
@@ -389,6 +424,26 @@ Visualization Manager:
         Pitch: 0.47039979696273804
         Target Frame: <Fixed Frame>
         Yaw: 4.404521942138672
+      - Class: rviz/Orbit
+        Distance: 6.414305686950684
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.05999999865889549
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Field of View: 0.7853981852531433
+        Focal Point:
+          X: 1.3629124164581299
+          Y: 1.7165004014968872
+          Z: -0.7891344428062439
+        Focal Shape Fixed Size: false
+        Focal Shape Size: 0.05000000074505806
+        Invert Z Axis: false
+        Name: Orbit
+        Near Clip Distance: 0.009999999776482582
+        Pitch: 0.8503994941711426
+        Target Frame: <Fixed Frame>
+        Yaw: 1.0213388204574585
 Window Geometry:
   Displays:
     collapsed: false

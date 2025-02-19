@@ -29,9 +29,9 @@ def publish_velocity(publishers_count):
     # Phase durations in seconds
     max_velocity = 1
     zero_velocity_duration = 4
-    ramp_up_duration = 0.1
-    constant_velocity_duration = 0.4
-    ramp_down_duration = 0.1
+    ramp_up_duration = 1
+    constant_velocity_duration = 1
+    ramp_down_duration = 1
     ramp_down_start = zero_velocity_duration + ramp_up_duration + constant_velocity_duration
 
     while not rospy.is_shutdown():

@@ -50,45 +50,70 @@ class TestGUI(qt_widgets.QWidget):
 
         self.initial_values_set = False  # Initialization state variable
 
-        self.particles = []  # All particles that is union of controllable and uncontrollable particles
-        self.binded_particles = []  # Particles that are uncontrollable and binded to the leader frame
+        self.custom_static_particles = []  # Particles that are controllable attached to the fabric 
+        self.binded_particles = []  # Particles that are uncontrollable and binded to other sensors such as human hand tracking
 
         self.odom_topic_prefix = None
         self.cmd_vel_topic_prefix = None
-        self.odom_topic_leader = None
+        self.binded_particles_odom_topic_prefix = None
         
-        simulator_node_name = "/fabric_simulator_node"
-        # simulator_node_name = ""
+        self.mode = "simulation_test"  # Default mode. Use this mode for default fabric simulation test
+        # self.mode = "composite_sheet_application_test"  # Use this mode for testing the composite sheet application
         
-        while not self.particles:
+        if self.mode == "simulation_test":
+            simulator_node_name = "/fabric_simulator_node"
+        elif self.mode == "composite_sheet_application_test":
+            simulator_node_name = ""
+        
+        while not self.custom_static_particles:
             try:
-                self.particles = rospy.get_param(simulator_node_name + "/custom_static_particles")
+                self.custom_static_particles = rospy.get_param(simulator_node_name + "/custom_static_particles")
                 self.odom_topic_prefix = rospy.get_param(simulator_node_name + "/custom_static_particles_odom_topic_prefix")
                 self.cmd_vel_topic_prefix = rospy.get_param(simulator_node_name + "/custom_static_particles_cmd_vel_topic_prefix")
-                self.odom_topic_leader = rospy.get_param("/odom_topic_leader", "/odom_leader")
+
             except:
-                rospy.logwarn("No particles obtained from ROS parameters. GUI will be empty.")
+                rospy.logwarn("No custom static particles obtained from ROS parameters. That part of the GUI will be empty.")
+                time.sleep(0.5)
+                
+        while not self.binded_particles:
+            try:
+                binded_particles_default = ["hand_1", "hand_2"]
+                binded_particles_odom_topic_prefix_default = "/odom_"
+                
+                self.binded_particles = rospy.get_param(simulator_node_name + "/binded_particles", binded_particles_default)
+                self.binded_particles_odom_topic_prefix = rospy.get_param(simulator_node_name + "/binded_particles_odom_topic_prefix", binded_particles_odom_topic_prefix_default)
+                
+            except:
+                rospy.logwarn("No binded particles obtained from ROS parameters. That part of the GUI will be empty.")
                 time.sleep(0.5)
 
-        self.binded_particles = list(set(self.particles))
+        # Remove duplicates from the list of custom static particles and binded particles
+        self.custom_static_particles = list(set(self.custom_static_particles)) 
+        self.binded_particles = list(set(self.binded_particles)) 
+        
+        # Sorting the list of particles in ascending order
+        self.custom_static_particles.sort()
+        self.binded_particles.sort()
 
         self.odom_publishers = {}
-        self.info_binded_pose_publishers = {}
 
         self.particle_positions = {}
         self.particle_orientations = {}
         self.particle_twists = {}
 
-        self.initialize_leader_position()
-
-        # Stores Pose() msg of ROS geometry_msgs (Pose.position and Pose.orientation)
-        self.binded_relative_poses = {}
+        self.initialize_binded_particle_positions()
 
         # Service clients and publishers for modulus values
         
-        self.initialize_modulus_services_and_publishers(simulator_node_name)
-        # self.initialize_modulus_services_and_publishers(simulator_node_name="/fabric_simulator")
+        # Initialize the modulus services and publishers
+        if self.mode == "simulation_test":
+            self.initialize_modulus_services_and_publishers(simulator_node_name)
+        elif self.mode == "composite_sheet_application_test":
+            self.initialize_modulus_services_and_publishers(simulator_node_name="/fabric_simulator")
 
+        # Flag to check if orientation control is enabled, GUI is created accordingly
+        self.is_orientation_control_enabled = False
+        
         self.createUI()
 
         self.spacenav_twist = Twist()  # Set it to an empty twist message
@@ -124,12 +149,24 @@ class TestGUI(qt_widgets.QWidget):
         self.change_stretching_compliance_publisher = rospy.Publisher("/change_fabric_stretching_compliance", Float32, queue_size=1)
         self.change_bending_compliance_publisher = rospy.Publisher("/change_fabric_bending_compliance", Float32, queue_size=1)
 
+    def add_horizontal_line_to_layout(self, layout):
+        # Create a horizontal line
+        h_line = qt_widgets.QFrame()
+        h_line.setFrameShape(qt_widgets.QFrame.HLine)
+        h_line.setFrameShadow(qt_widgets.QFrame.Sunken)
+        layout.addWidget(h_line)
+
+    def add_vertical_line_to_layout(self, layout):
+        # Create a vertical line
+        v_line = qt_widgets.QFrame()
+        v_line.setFrameShape(qt_widgets.QFrame.VLine)
+        v_line.setFrameShadow(qt_widgets.QFrame.Sunken)
+        layout.addWidget(v_line)
+
     def createUI(self):
         self.layout = qt_widgets.QVBoxLayout(self)
 
         self.buttons_manual = {}  # To enable/disable manual control
-        self.start_controller_buttons = {}  # For leader particle only
-        self.bind_to_leader_buttons = {}  # For binded particles
 
         self.text_inputs_pos = {}  # To manually set x y z positions of the particles
         self.text_inputs_ori = {}  # To manually set x y z orientations of the particles (Euler RPY, degree input)
@@ -138,29 +175,24 @@ class TestGUI(qt_widgets.QWidget):
         self.add_sim_controls()
         
         # Add a horizontal line here
-        h_line = qt_widgets.QFrame()
-        h_line.setFrameShape(qt_widgets.QFrame.HLine)
-        h_line.setFrameShadow(qt_widgets.QFrame.Sunken)
-        self.layout.addWidget(h_line)  # Assuming 'self.layout' is your main layout
+        self.add_horizontal_line_to_layout(self.layout)
         
         # Combine the lists with boundary markers
-        combined_particles = (["leader"] + ["_boundary_marker_"] +
-                              self.binded_particles + ["_boundary_marker_"])
+        combined_particles = (self.binded_particles + ["_boundary_marker_"] +
+                              self.custom_static_particles + ["_boundary_marker_"])
 
-        # Create rows for the (custom static) particles and the leader
+        # Create rows for the (custom static) particles and the self.binded_particles
         for particle in combined_particles:
-            # Insert a horizontal line between each list (["leader"], self.binded_particles)
+            # Insert a horizontal line between each list (self.binded_particles, self.custom_static_particles)
             if particle == "_boundary_marker_":
                 # Add a horizontal line here
-                h_line = qt_widgets.QFrame()
-                h_line.setFrameShape(qt_widgets.QFrame.HLine)
-                h_line.setFrameShadow(qt_widgets.QFrame.Sunken)
-                self.layout.addWidget(h_line)  # Assuming 'self.layout' is your main layout
+                self.add_horizontal_line_to_layout(self.layout)
                 continue
 
             # Create QHBoxLayout for each row
             row_layout = qt_widgets.QHBoxLayout()
 
+            # Add manual control button for velocity commands to particles 
             manual_control_button = qt_widgets.QPushButton()
             manual_control_button.setText("Manually Control " + str(particle))
             manual_control_button.setCheckable(True)  # Enables toggle behavior
@@ -172,10 +204,7 @@ class TestGUI(qt_widgets.QWidget):
 
             # ------------------------------------------------
             # Add a separator vertical line here
-            separator = qt_widgets.QFrame()
-            separator.setFrameShape(qt_widgets.QFrame.VLine)
-            separator.setFrameShadow(qt_widgets.QFrame.Sunken)
-            row_layout.addWidget(separator)
+            self.add_vertical_line_to_layout(row_layout)
             # ------------------------------------------------
 
             # Add button to get current pose to GUI for easy set position and orientation operations
@@ -186,10 +215,7 @@ class TestGUI(qt_widgets.QWidget):
 
             # ------------------------------------------------
             # Add a separator vertical line here
-            separator = qt_widgets.QFrame()
-            separator.setFrameShape(qt_widgets.QFrame.VLine)
-            separator.setFrameShadow(qt_widgets.QFrame.Sunken)
-            row_layout.addWidget(separator)
+            self.add_vertical_line_to_layout(row_layout)
             # ------------------------------------------------
 
             # Create LineEdits and Add to row layout
@@ -216,86 +242,65 @@ class TestGUI(qt_widgets.QWidget):
             set_pos_button.clicked.connect(lambda _, p=particle: self.set_position_cb(p))
             row_layout.addWidget(set_pos_button)
 
-            # ------------------------------------------------
-            # Add a separator vertical line here
-            separator = qt_widgets.QFrame()
-            separator.setFrameShape(qt_widgets.QFrame.VLine)
-            separator.setFrameShadow(qt_widgets.QFrame.Sunken)
-            row_layout.addWidget(separator)
-            # ------------------------------------------------
+            if self.is_orientation_control_enabled:
+                # ------------------------------------------------
+                # Add a separator vertical line here
+                self.add_vertical_line_to_layout(row_layout)
+                # ------------------------------------------------
 
-            # Add Set orientation button text inputs
-            self.text_inputs_ori[particle] = {}
-            for axis in ['x', 'y', 'z']:
-                label = qt_widgets.QLabel(axis + ':')
-                line_edit = qt_widgets.QLineEdit()
+                # Add Set orientation button text inputs
+                self.text_inputs_ori[particle] = {}
+                for axis in ['x', 'y', 'z']:
+                    label = qt_widgets.QLabel(axis + ':')
+                    line_edit = qt_widgets.QLineEdit()
 
-                if axis == 'x':
-                    line_edit.setText(str(0.0))
-                elif axis == 'y':
-                    line_edit.setText(str(0.0))
-                elif axis == 'z':
-                    line_edit.setText(str(0.0))
+                    if axis == 'x':
+                        line_edit.setText(str(0.0))
+                    elif axis == 'y':
+                        line_edit.setText(str(0.0))
+                    elif axis == 'z':
+                        line_edit.setText(str(0.0))
 
-                row_layout.addWidget(label)
-                row_layout.addWidget(line_edit)
-                self.text_inputs_ori[particle][axis] = line_edit
+                    row_layout.addWidget(label)
+                    row_layout.addWidget(line_edit)
+                    self.text_inputs_ori[particle][axis] = line_edit
 
-            # Create Set Orientation button
-            set_ori_button = qt_widgets.QPushButton()
-            set_ori_button.setText("Set Orientation")
-            # set_ori_button.clicked.connect(lambda _, p=particle: self.set_orientation_cb_basic(p))
-            set_ori_button.clicked.connect(lambda _, p=particle: self.set_orientation_cb(p))
-            row_layout.addWidget(set_ori_button)
+                # Create Set Orientation button
+                set_ori_button = qt_widgets.QPushButton()
+                set_ori_button.setText("Set Orientation")
+                # set_ori_button.clicked.connect(lambda _, p=particle: self.set_orientation_cb_basic(p))
+                set_ori_button.clicked.connect(lambda _, p=particle: self.set_orientation_cb(p))
+                row_layout.addWidget(set_ori_button)
 
             # ------------------------------------------------
             # Add a separator vertical line here
-            separator = qt_widgets.QFrame()
-            separator.setFrameShape(qt_widgets.QFrame.VLine)
-            separator.setFrameShadow(qt_widgets.QFrame.Sunken)
-            row_layout.addWidget(separator)
+            self.add_vertical_line_to_layout(row_layout)
             # ------------------------------------------------
 
-            # Create Pause Controller Button or Enable Disable Particle Button
-            if particle == "leader":
-                start_controller_button = qt_widgets.QPushButton()
-                start_controller_button.setText("Start Controller")
-                start_controller_button.setEnabled(False)  # Disable the button
-                row_layout.addWidget(start_controller_button)
-
-                self.start_controller_buttons[particle] = start_controller_button
-            if particle in self.binded_particles:
-                bind_to_leader_button = qt_widgets.QPushButton()
-                bind_to_leader_button.setText("Bind to Leader")
-                bind_to_leader_button.clicked.connect(lambda _, p=particle: self.bind_to_leader_button_cb(p))
-                bind_to_leader_button.setCheckable(True)  # Set the pause button as checkable
-
-                row_layout.addWidget(bind_to_leader_button)
-
-                self.bind_to_leader_buttons[particle] = bind_to_leader_button
+            # Create Buttons dedicated to the binded particles
+            if particle in self.binded_particles: 
+                # Send a binded particle to the centroid of the custom static particles
+                send_to_centroid_button = qt_widgets.QPushButton()
+                send_to_centroid_button.setText("Send to Center")
+                send_to_centroid_button.clicked.connect(lambda _, p=particle: self.send_to_centroid_cb(p))
+                row_layout.addWidget(send_to_centroid_button)
 
             # Create Reset fabric positions button
-            if particle in self.binded_particles:
+            if particle in self.custom_static_particles:
                 reset_button = qt_widgets.QPushButton()
                 reset_button.setText("Reset Controller Position")
                 reset_button.setEnabled(False)  # Disable the button
                 row_layout.addWidget(reset_button)
-            else:  # Leader particle
-                # Send leader particle to the centroid of the particles
-                send_to_centroid_button = qt_widgets.QPushButton()
-                send_to_centroid_button.setText("Center Leader Frame")
-                send_to_centroid_button.clicked.connect(lambda _, p=particle: self.send_to_centroid_cb(p))
-                row_layout.addWidget(send_to_centroid_button)
 
             # Create Make Dynamic Button
-            if particle in self.binded_particles:
+            if particle in self.custom_static_particles:
                 make_dynamic_button = qt_widgets.QPushButton()
                 make_dynamic_button.setText("Make Dynamic")
                 make_dynamic_button.clicked.connect(lambda _, p=particle: self.change_dynamicity_cb(p, True))
                 row_layout.addWidget(make_dynamic_button)
 
             # Create Make Static Button
-            if particle in self.binded_particles:
+            if particle in self.custom_static_particles:
                 make_static_button = qt_widgets.QPushButton()
                 make_static_button.setText("Make Static")
                 make_static_button.clicked.connect(lambda _, p=particle: self.change_dynamicity_cb(p, False))
@@ -304,13 +309,14 @@ class TestGUI(qt_widgets.QWidget):
             # Add row layout to the main layout
             self.layout.addLayout(row_layout)
 
-            if particle == "leader":
-                self.odom_publishers[particle] = rospy.Publisher(self.odom_topic_leader, Odometry, queue_size=1)
-            else:
-                self.odom_publishers[particle] = rospy.Publisher(self.odom_topic_prefix + str(particle), Odometry, queue_size=1)
+            # Add the odometry publisher for each particle
+            if particle in self.binded_particles: 
+                self.odom_publishers[particle] = rospy.Publisher(self.binded_particles_odom_topic_prefix + str(particle), 
+                                                                    Odometry, queue_size=1)
+            if particle in self.custom_static_particles:
+                self.odom_publishers[particle] = rospy.Publisher(self.odom_topic_prefix + str(particle), 
+                                                                    Odometry, queue_size=1)
 
-            if particle in self.binded_particles:
-                self.info_binded_pose_publishers[particle] = rospy.Publisher("fake_odom_publisher_gui_info_" + str(particle) + "_target_pose", Marker, queue_size=1)
 
         self.setLayout(self.layout)
 
@@ -343,10 +349,7 @@ class TestGUI(qt_widgets.QWidget):
         compliance_layout.addWidget(set_stretching_compliance_button)
 
         # Separator
-        separator = qt_widgets.QFrame()
-        separator.setFrameShape(qt_widgets.QFrame.VLine)
-        separator.setFrameShadow(qt_widgets.QFrame.Sunken)
-        compliance_layout.addWidget(separator)
+        self.add_vertical_line_to_layout(compliance_layout)
 
         # Create 'Get Bending Compliance' button
         get_bending_compliance_button = qt_widgets.QPushButton()
@@ -370,10 +373,7 @@ class TestGUI(qt_widgets.QWidget):
         compliance_layout.addWidget(set_bending_compliance_button)
         
         # Separator
-        separator = qt_widgets.QFrame()
-        separator.setFrameShape(qt_widgets.QFrame.VLine)
-        separator.setFrameShadow(qt_widgets.QFrame.Sunken)
-        compliance_layout.addWidget(separator)
+        self.add_vertical_line_to_layout(compliance_layout)
         
         # Create 'Enable Collision Handling' button
         enable_collision_button = qt_widgets.QPushButton()
@@ -470,13 +470,14 @@ class TestGUI(qt_widgets.QWidget):
             self.text_inputs_pos[particle]['y'].setText(self.format_number(pos.y,digits=3)) 
             self.text_inputs_pos[particle]['z'].setText(self.format_number(pos.z,digits=3)) 
 
-            # Convert quaternion orientation to RPY (Roll-pitch-yaw) Euler Angles (degrees)
-            rpy = np.rad2deg(tf_trans.euler_from_quaternion([ori.x,ori.y,ori.z,ori.w]))
+            if self.is_orientation_control_enabled:
+                # Convert quaternion orientation to RPY (Roll-pitch-yaw) Euler Angles (degrees)
+                rpy = np.rad2deg(tf_trans.euler_from_quaternion([ori.x,ori.y,ori.z,ori.w]))
 
-            # Fill the orientation text  inputs with the current RPY orientation
-            self.text_inputs_ori[particle]['x'].setText(self.format_number(rpy[0],digits=1))
-            self.text_inputs_ori[particle]['y'].setText(self.format_number(rpy[1],digits=1))
-            self.text_inputs_ori[particle]['z'].setText(self.format_number(rpy[2],digits=1))
+                # Fill the orientation text  inputs with the current RPY orientation
+                self.text_inputs_ori[particle]['x'].setText(self.format_number(rpy[0],digits=1))
+                self.text_inputs_ori[particle]['y'].setText(self.format_number(rpy[1],digits=1))
+                self.text_inputs_ori[particle]['z'].setText(self.format_number(rpy[2],digits=1))
         else:
             rospy.logwarn(f"Key '{particle}' not found in the particle_positions and particle_orientations dictionaries.")
 
@@ -489,7 +490,7 @@ class TestGUI(qt_widgets.QWidget):
         # Keep the same orientation
         pose.orientation = self.particle_orientations[particle]
 
-        # if particle == "leader":
+        # if particle in self.binded_particles:
         self.particle_positions[particle] = pose.position
         self.particle_orientations[particle] = pose.orientation
 
@@ -526,6 +527,9 @@ class TestGUI(qt_widgets.QWidget):
                                     target_position, target_orientation, particle)
         
     def set_orientation_cb_basic(self,particle):
+        if not self.is_orientation_control_enabled:
+            return
+        
         pose = Pose()
 
         # Keep the same position
@@ -542,7 +546,7 @@ class TestGUI(qt_widgets.QWidget):
         pose.orientation.z = q[2]
         pose.orientation.w = q[3]
 
-        # if particle == "leader":
+        # if particle in self.binded_particles:
         self.particle_positions[particle] = pose.position
         self.particle_orientations[particle] = pose.orientation
 
@@ -555,6 +559,9 @@ class TestGUI(qt_widgets.QWidget):
         self.odom_publishers[particle].publish(odom)
 
     def set_orientation_cb(self,particle):
+        if not self.is_orientation_control_enabled:
+            return
+        
         if particle not in self.particle_positions:
             return
         
@@ -698,7 +705,7 @@ class TestGUI(qt_widgets.QWidget):
                 linear_velocity = self.compute_linear_velocity_from_profile(profile, elapsed_time)
                 angular_velocity = self.compute_angular_velocity_from_profile(profile, elapsed_time)
                 
-                if particle == "leader":
+                if particle in self.binded_particles:
                     self.particle_positions[particle] = new_position
                     self.particle_orientations[particle] = new_orientation
 
@@ -954,72 +961,11 @@ class TestGUI(qt_widgets.QWidget):
     # ----------------------------------------------------------------------------------
     
 
-    def reset_position_cb(self, particle):
-        # Call reset positions service
-        service_name = '/fabric_velocity_controller/reset_positions' 
-        rospy.wait_for_service(service_name, timeout=2.0)
-        try:
-            reset_positions_service = rospy.ServiceProxy(service_name, ResetParticlePosition)
-            # Create a request to the service
-            request = ResetParticlePositionRequest()
-            request.particle_id = particle
-
-            reset_positions_service(request)
-        except rospy.ServiceException as e:
-            print("Service call failed: %s"%e)
-
-    def bind_to_leader_button_cb(self, particle):
-        if self.bind_to_leader_buttons[particle].isChecked():
-            # Button is currently pressed, no need to set it to False
-            print(f"Button for binding particle {particle} to leader is now pressed.")
-
-            # Store binded particle's current pose relative to the leader frame
-            if (particle in self.particle_positions) and ("leader" in self.particle_positions):                
-                # Current Pose of the leader in world frame
-                pos_leader = self.particle_positions["leader"] # Point() msg of ROS geometry_msgs
-                ori_leader = self.particle_orientations["leader"] # Quaternion() msg of ROS geometry_msgs
-
-                # Current Pose of the binded particle in world frame
-                pos_binded_world = self.particle_positions[particle] # Point() msg of ROS geometry_msgs
-                ori_binded_world = self.particle_orientations[particle] # Quaternion() msg of ROS geometry_msgs
-
-                # Convert quaternions to rotation matrices
-                rotation_matrix_leader = tf_trans.quaternion_matrix([ori_leader.x, ori_leader.y, ori_leader.z, ori_leader.w])
-
-                # Calculate the relative position of the binded particle in the leader's frame
-                relative_pos = np.dot(rotation_matrix_leader.T, np.array([pos_binded_world.x - pos_leader.x, pos_binded_world.y - pos_leader.y, pos_binded_world.z - pos_leader.z, 1]))[:3]
-
-                # Calculate the relative orientation of the binded particle in the leader's frame
-                inv_ori_leader = tf_trans.quaternion_inverse([ori_leader.x, ori_leader.y, ori_leader.z, ori_leader.w])
-                relative_ori = tf_trans.quaternion_multiply(inv_ori_leader, [ori_binded_world.x, ori_binded_world.y, ori_binded_world.z, ori_binded_world.w])
-
-                # Store the relative position and orientation
-                pose = Pose()
-                pose.position = Point(*relative_pos)
-                pose.orientation = Quaternion(*relative_ori)
-                self.binded_relative_poses[particle] = pose # stores Pose() msg of ROS geometry_msgs (Pose.position and Pose.orientation)
-
-                # Make the manual control button unpressed
-                self.buttons_manual[particle].setChecked(False)
-            else:
-                rospy.logwarn("Initial pose values of the object particles or leader is not yet set")
-                self.bind_to_leader_buttons[particle].setChecked(False)
-
-        else:
-            # Button is currently not pressed, no need to set it to True
-            print(f"Button for binding particle {particle} to leader is now NOT pressed.")   
-
-            # Unbind particle from leader by deleting the relative pose from the dictionary
-            if particle in self.binded_relative_poses:
-                del self.binded_relative_poses[particle]
-            else:
-                rospy.logerr(f"Key '{particle}' not found in the binded_relative_poses dictionary.")
-
     def send_to_centroid_cb(self,particle_to_send):
         # Calculate the centroid of the other particles
         centroid_pos = np.zeros(3)
         n_particle = 0 # number of particles to calculate the centroid
-        for particle in ["leader"] + self.particles:
+        for particle in self.custom_static_particles:
             if particle != particle_to_send:
                 # Check if the particle pose is set
                 if (particle in self.particle_positions) and (particle in self.particle_orientations):
@@ -1044,7 +990,7 @@ class TestGUI(qt_widgets.QWidget):
             # Keep the same orientation
             pose.orientation = self.particle_orientations[particle_to_send]
 
-            if particle_to_send == "leader":
+            if particle_to_send in self.binded_particles:
                 self.particle_positions[particle_to_send] = pose.position
                 self.particle_orientations[particle_to_send] = pose.orientation
 
@@ -1062,10 +1008,10 @@ class TestGUI(qt_widgets.QWidget):
         # Reset spacenav_twist to zero if it's been long time since the last arrived
         self.check_spacenav_twist_wait_timeout()
 
-        # Handle manual control of each particle and the leader
-        for particle in ["leader"] + self.particles:
-            # Do not proceed with the "non-leader" particles until the initial values have been set
-            if (particle != "leader") and not((particle in self.particle_positions) and ("leader" in self.particle_positions)):
+        # Handle manual control of each custom static particle and the binded particles
+        for particle in self.binded_particles + self.custom_static_particles:
+            # Do not proceed with the particles until the initial position values have been set
+            if not (particle in self.particle_positions):
                 continue
 
             if self.buttons_manual[particle].isChecked():
@@ -1115,7 +1061,7 @@ class TestGUI(qt_widgets.QWidget):
                     pose.orientation.w = new_quaternion[3]
                 # # --------------------------------------------------------------
 
-                if particle == "leader":
+                if particle in self.binded_particles:
                     self.particle_positions[particle] = pose.position
                     self.particle_orientations[particle] = pose.orientation
 
@@ -1127,92 +1073,12 @@ class TestGUI(qt_widgets.QWidget):
                 odom.twist.twist = self.spacenav_twist
                 self.odom_publishers[particle].publish(odom)
 
-        # Handle the control of binded particles
-        for particle in self.binded_particles:
-            # Do not proceed with the "binded" particles until the initial values have been set
-            if not (particle in self.particle_positions) and ("leader" in self.particle_positions):
-                continue
-
-            if self.bind_to_leader_buttons[particle].isChecked():
-                if particle in self.binded_relative_poses:
-                    # calculate the pose of the binded particle in world using the relative pose to the leader
-                    
-                    # Current Pose of the leader in world frame
-                    pos_leader = self.particle_positions["leader"] # Point() msg of ROS geometry_msgs
-                    ori_leader = self.particle_orientations["leader"] # Quaternion() msg of ROS geometry_msgs
-
-                    # Relative Pose of the binded particle in leader's frame
-                    pos_binded_in_leader = self.binded_relative_poses[particle].position # Point() msg of ROS geometry_msgs
-                    ori_binded_in_leader = self.binded_relative_poses[particle].orientation # Quaternion() msg of ROS geometry_msgs
-
-                    # Convert quaternions to rotation matrices
-                    rotation_matrix_leader = tf_trans.quaternion_matrix([ori_leader.x, ori_leader.y, ori_leader.z, ori_leader.w])
-
-                    # Calculate the position of the binded particle in the world frame
-                    pos_binded_in_world = np.dot(rotation_matrix_leader, np.array([pos_binded_in_leader.x, pos_binded_in_leader.y, pos_binded_in_leader.z, 1]))[:3] + np.array([pos_leader.x, pos_leader.y, pos_leader.z])
-
-                    # Calculate the orientation of the binded particle in the world frame
-                    ori_binded_in_world = tf_trans.quaternion_multiply([ori_leader.x, ori_leader.y, ori_leader.z, ori_leader.w], [ori_binded_in_leader.x, ori_binded_in_leader.y, ori_binded_in_leader.z, ori_binded_in_leader.w])
-
-                    # Now publish the binded particle's pose as an odom msg
-                    pose = Pose()
-                    pose.position = Point(*pos_binded_in_world) # pos_binded_world
-                    pose.orientation = Quaternion(*ori_binded_in_world) # ori_binded_world
-
-                    # Prepare Odometry message
-                    odom = Odometry()
-                    odom.header.stamp = rospy.Time.now()
-                    odom.header.frame_id = "map" 
-                    odom.pose.pose = pose
-                    # odom.twist.twist.linear = TODO
-                    # odom.twist.twist.angular =  TODO
-                    self.odom_publishers[particle].publish(odom)
-
-                    # Also publish an arrow to distinguish the binded particles
-                    self.publish_arrow_marker(pos_leader,pose,particle)
-                else:
-                    rospy.logwarn(f"Key '{particle}' not found in the binded_relative_poses dictionary.")
 
     def change_dynamicity_cb(self,particle, is_dynamic):
         msg = ChangeParticleDynamicity()
         msg.particle_id = particle
         msg.is_dynamic = is_dynamic
         self.pub_change_dynamicity.publish(msg)
-
-    def publish_arrow_marker(self, leader_position, target_pose, particle):
-        # Create a marker for the arrow
-        marker = Marker()
-        marker.header.frame_id = "map"
-        marker.header.stamp = rospy.Time.now()
-        marker.ns = "target_arrow"
-        marker.id = 0
-        marker.type = Marker.ARROW
-        marker.action = Marker.ADD
-        
-        # Set the scale of the arrow
-        marker.scale.x = 0.015  # Shaft diameter
-        marker.scale.y = 0.05  # Head diameter
-        marker.scale.z = 0.3  # Head length
-        
-        # Set the color
-        marker.color.a = 0.3
-        marker.color.r = 0.0
-        marker.color.g = 0.0
-        marker.color.b = 0.7
-        
-        # Set the pose (position and orientation) for the marker
-        marker.pose.orientation.w = 1.0  # Orientation (quaternion)
-        
-        # Set the start and end points of the arrow
-        marker.points = []
-        start_point = leader_position  # Should be a Point message
-        end_point = target_pose.position  # Assuming target_pose is a Pose message
-        marker.points.append(start_point)
-        marker.points.append(end_point)
-        
-        # Publish the marker
-        self.info_binded_pose_publishers[particle].publish(marker)
-
 
     def spacenav_twist_callback(self, twist):
         # self.spacenav_twist.linear.x = twist.linear.x # because we are in YZ plane
@@ -1235,51 +1101,42 @@ class TestGUI(qt_widgets.QWidget):
 
     def state_array_callback(self, states_msg):
         # Positions
-        for particle in self.particles:
+        for particle in self.custom_static_particles:
             # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
                 self.particle_positions[particle] = states_msg.states[particle].pose.position
                 self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
                 self.particle_twists[particle] = states_msg.states[particle].twist
 
 
-    def initialize_leader_position(self):
-        # Initialize to zero vector
-        position = Point()
-        position.x = 0
-        position.y = 0
-        position.z = 0
+    def initialize_binded_particle_positions(self):
+        for particle in self.binded_particles:
+            # Initialize to zero vector
+            position = Point()
+            position.x = 0
+            position.y = 0
+            position.z = 0
 
-        # Initialize to identity rotation
-        quaternion = Quaternion()
-        quaternion.x = 0
-        quaternion.y = 0
-        quaternion.z = 0
-        quaternion.w = 1
+            # Initialize to identity rotation
+            quaternion = Quaternion()
+            quaternion.x = 0
+            quaternion.y = 0
+            quaternion.z = 0
+            quaternion.w = 1
 
-        self.particle_positions["leader"] = position
-        self.particle_orientations["leader"] = quaternion
+            self.particle_positions[particle] = position
+            self.particle_orientations[particle] = quaternion
 
     def manual_control_button_pressed_cb(self, particle):
         if self.buttons_manual[particle].isChecked():
             # Button is currently pressed, no need to set it to False
             print(f"Button for manual control of particle {particle} is now pressed.")
 
-            # Do not proceed with the "non-leader" particles until the initial values have been set
-            if (particle != "leader") and not ((particle in self.particle_positions) and ("leader" in self.particle_positions)):
+            # Do not proceed with the particles until the initial values have been set
+            if not (particle in self.particle_positions) :
                 # Make the manual control button unpressed
                 self.buttons_manual[particle].setChecked(False)
 
-                rospy.logwarn("Initial pose values of the object particles or the leader is not yet set")
-            else:
-                if particle in self.binded_particles:
-                    # Unbind particle from leader by deleting the relative pose from the dictionary
-                    if particle in self.binded_relative_poses:
-                        del self.binded_relative_poses[particle]
-                    # else:
-                    #     rospy.loginfo(f"Key '{particle}' not found in the binded_relative_poses dictionary.")
-
-                    # Make the bind to leader button unpressed
-                    self.bind_to_leader_buttons[particle].setChecked(False)
+                rospy.logwarn("Initial pose values of the object particles or the binded particle is not yet set")
 
         else:
             # Button is currently not pressed, no need to set it to True
