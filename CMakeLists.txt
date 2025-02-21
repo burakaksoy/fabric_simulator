@@ -132,9 +132,11 @@ endif()
 set(MSG_FILES 
     MinDistanceData.msg
     MinDistanceDataArray.msg
-    ChangeParticleDynamicity.msg 
-    SegmentState.msg 
+    ChangeParticleDynamicity.msg
+    SegmentState.msg
     SegmentStateArray.msg
+    AttachExternalOdomFrameRequest.msg
+    FixNearestFabricParticleRequest.msg
 )
 
 ## Generate messages in the 'msg' folder
@@ -146,12 +148,14 @@ add_message_files(
 ## Generate services in the 'srv' folder
 add_service_files(
     FILES
-    EnableCollisionHandling.srv 
-    GetFabricBendingCompliance.srv 
-    GetFabricStretchingCompliance.srv 
-    SetFabricBendingCompliance.srv 
-    SetFabricStretchingCompliance.srv 
+    EnableCollisionHandling.srv
+    GetFabricBendingCompliance.srv
+    GetFabricStretchingCompliance.srv
+    SetFabricBendingCompliance.srv
+    SetFabricStretchingCompliance.srv
     SetParticleDynamicity.srv
+    AttachExternalOdomFrame.srv
+    FixNearestFabricParticle.srv
 )
 
 ## Generate actions in the 'action' folder

@@ -21,6 +21,8 @@
 #include <fabric_simulator/MinDistanceDataArray.h> 
 #include <fabric_simulator/ChangeParticleDynamicity.h> 
 #include <fabric_simulator/SegmentStateArray.h> 
+#include <fabric_simulator/FixNearestFabricParticleRequest.h> 
+#include <fabric_simulator/AttachExternalOdomFrameRequest.h> 
 
 #include <std_srvs/Empty.h>
 #include <fabric_simulator/SetParticleDynamicity.h> // service
@@ -29,6 +31,8 @@
 #include <fabric_simulator/SetFabricBendingCompliance.h> // service
 #include <fabric_simulator/GetFabricBendingCompliance.h> // service
 #include <fabric_simulator/EnableCollisionHandling.h> // service
+#include <fabric_simulator/FixNearestFabricParticle.h> // service
+#include <fabric_simulator/AttachExternalOdomFrame.h> // service
 
 #include <time.h>
 #include <math.h>
@@ -139,21 +143,28 @@ private:
     void publishMinDistLineMarkers(const std::vector<std::vector<utilities::CollisionHandler::MinDistanceData>>& min_distances_mt);
 
     // Odometry callback functions
-    void odometryCb_01(const nav_msgs::Odometry::ConstPtr odom_msg);
-    void odometryCb_02(const nav_msgs::Odometry::ConstPtr odom_msg);
-    void odometryCb_03(const nav_msgs::Odometry::ConstPtr odom_msg);
-    void odometryCb_04(const nav_msgs::Odometry::ConstPtr odom_msg);
+    void odometryCb_01(const nav_msgs::Odometry::ConstPtr& odom_msg);
+    void odometryCb_02(const nav_msgs::Odometry::ConstPtr& odom_msg);
+    void odometryCb_03(const nav_msgs::Odometry::ConstPtr& odom_msg);
+    void odometryCb_04(const nav_msgs::Odometry::ConstPtr& odom_msg);
 
     void odometryCb_custom_static_particles(const nav_msgs::Odometry::ConstPtr& odom_msg, const int& id);
 
     void cmdVelCb_custom_static_particles(const geometry_msgs::Twist::ConstPtr& twist_msg, const int& id);
 
     // Change Dynamicity callback function
-    void changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr change_particle_dynamicity_msg);
+    void changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr& change_particle_dynamicity_msg);
+    bool updateParticleDynamicityCommon(int particle_id, bool is_dynamic);
+
+    void fixNearestFabricParticleRequestCb(const fabric_simulator::FixNearestFabricParticleRequest::ConstPtr& fix_nearest_fabric_particle_request_msg);
+    bool fixNearestFabricParticleCommon(bool is_fix, const geometry_msgs::PoseStamped &pose);
+
+    void attachExternalOdomFrameRequestCb(const fabric_simulator::AttachExternalOdomFrameRequest::ConstPtr& attach_externa_odom_frame_request_msg);
+    bool attachExternalOdomFrameCommon();
 
     // Change Stretching Compliance and Bending Compliance callback functions
-    void changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr stretching_compliance_msg);
-    void changeBendingComplianceCb(const std_msgs::Float32::ConstPtr bending_compliance_msg);
+    void changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr& stretching_compliance_msg);
+    void changeBendingComplianceCb(const std_msgs::Float32::ConstPtr& bending_compliance_msg);
 
     // Service functions
     //   void initialize() { std_srvs::Empty empt; updateParams(empt.request, empt.response); }
@@ -163,6 +174,12 @@ private:
 
     bool setParticleDynamicityCallback(fabric_simulator::SetParticleDynamicity::Request &req,
         fabric_simulator::SetParticleDynamicity::Response &res);
+
+    bool fixNearestFabricParticleCallback(fabric_simulator::FixNearestFabricParticle::Request &req, 
+        fabric_simulator::FixNearestFabricParticle::Response &res);
+    
+    bool attachExternalOdomFrameCallback(fabric_simulator::AttachExternalOdomFrame::Request &req, 
+        fabric_simulator::AttachExternalOdomFrame::Response &res);
 
     // Create setStretchingCompliance service callback and setBendingCompliance service callback
     bool setFabricStretchingComplianceCallback(fabric_simulator::SetFabricStretchingCompliance::Request &req,
@@ -208,6 +225,12 @@ private:
 
     ros::Subscriber sub_change_particle_dynamicity_;
     ros::ServiceServer set_particle_dynamicity_srv_;
+
+    ros::Subscriber sub_fix_nearest_fabric_particle_request_;
+    ros::ServiceServer fix_nearest_fabric_particle_srv_;
+
+    ros::Subscriber sub_attach_external_odom_frame_request_;
+    ros::ServiceServer attach_external_odom_frame_srv_;
 
     ros::Subscriber sub_change_stretching_compliance_;
     ros::Subscriber sub_change_bending_compliance_;
@@ -315,6 +338,12 @@ private:
     std::string change_particle_dynamicity_topic_name_;
     std::string set_particle_dynamicity_service_name_;
 
+    std::string fix_nearest_fabric_particle_topic_name_;
+    std::string fix_nearest_fabric_particle_service_name_;
+
+    std::string attach_external_odom_frame_topic_name_;
+    std::string attach_external_odom_frame_service_name_;
+
     std::string set_fabric_stretching_compliance_service_name_;
     std::string set_fabric_bending_compliance_service_name_;
     std::string get_fabric_stretching_compliance_service_name_;
@@ -332,6 +361,7 @@ private:
     Real point_marker_scale_;
 
     std::vector<Real> point_marker_color_rgba_;
+    std::vector<Real> static_point_marker_color_rgba_;
 
     Real line_marker_scale_multiplier_;
 

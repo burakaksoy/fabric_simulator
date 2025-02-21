@@ -595,7 +595,8 @@ void Cloth::updateAttachedPose(const int &id, const Eigen::Matrix<Real,1,3> &pos
 
 void Cloth::attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
                                     std::vector<int> &ids,
-                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses){
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                    bool is_attach){
     // Attaches the particles that is inside a sphere defined with radius r parallel with center pos
     // Edits:
     // std::vector<int> ids;
@@ -613,8 +614,14 @@ void Cloth::attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Re
             findPositionVectorsAndIdsInSphere(pos_, r, ids, rel_poses);
         }
 
-        // Now make these particles static
-        setStaticParticles(ids);
+        if (is_attach){
+            // Make those particles stationary
+            setStaticParticles(ids);
+        }
+        else{
+            // Make those particles dynamic
+            setDynamicParticles(ids);
+        }
     }
 }
 

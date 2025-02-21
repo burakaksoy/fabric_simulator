@@ -6,11 +6,13 @@
                 "limitSymbolsToIncludedHeaders": false
             },
             "includePath": [
-                "/opt/ros/noetic/include/**",
                 "/usr/include/**",
+                "/opt/ros/noetic/include/**",
                 "${workspaceFolder}/include",
                 "/home/burak/catkin_ws_deformable/build/extern/**",
-                "/home/burak/catkin_ws_deformable/devel/include/**"
+                "/home/burak/catkin_ws_deformable/devel/include/**",
+                "/home/burak/catkin_ws_deformable/src/fabric_simulator/include/**",
+                "/home/burak/catkin_ws_deformable/src/rviz_ortho_view_controller/include/**"
             ],
             "name": "ROS",
             "intelliSenseMode": "gcc-x64",

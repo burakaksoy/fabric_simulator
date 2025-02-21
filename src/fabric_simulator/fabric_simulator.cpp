@@ -144,6 +144,7 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("point_marker_scale");
 
     nh_local_.deleteParam("point_marker_color_rgba");
+    nh_local_.deleteParam("static_point_marker_color_rgba");
 
     nh_local_.deleteParam("line_marker_scale_multiplier");
     
@@ -159,7 +160,13 @@ FabricSimulator::~FabricSimulator() {
 
     nh_local_.deleteParam("change_particle_dynamicity_topic_name");
     nh_local_.deleteParam("set_particle_dynamicity_service_name");
- 
+
+    nh_local_.deleteParam("fix_nearest_fabric_particle_topic_name");
+    nh_local_.deleteParam("fix_nearest_fabric_particle_service_name");
+    
+    nh_local_.deleteParam("attach_external_odom_frame_topic_name");
+    nh_local_.deleteParam("attach_external_odom_frame_service_name");
+
     nh_local_.deleteParam("rb_line_marker_scale_multiplier");
 
     nh_local_.deleteParam("rb_line_marker_color_rgba");
@@ -264,6 +271,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<Real>("point_marker_scale",   point_marker_scale_,   0.015);
 
     nh_local_.param("point_marker_color_rgba", point_marker_color_rgba_, std::vector<Real>({1.0, 0.5, 0.0, 1.0}));
+    nh_local_.param("static_point_marker_color_rgba", static_point_marker_color_rgba_, std::vector<Real>({1.0, 0.5, 1.0, 1.0}));
 
     nh_local_.param<Real>("line_marker_scale_multiplier", line_marker_scale_multiplier_, 1.0);
     
@@ -277,6 +285,12 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
     nh_local_.param<std::string>("change_particle_dynamicity_topic_name", change_particle_dynamicity_topic_name_, std::string("change_particle_dynamicity"));
     nh_local_.param<std::string>("set_particle_dynamicity_service_name", set_particle_dynamicity_service_name_, std::string("set_particle_dynamicity"));
+    
+    nh_local_.param<std::string>("fix_nearest_fabric_particle_topic_name", fix_nearest_fabric_particle_topic_name_, std::string("fix_nearest_fabric_particle_request"));
+    nh_local_.param<std::string>("fix_nearest_fabric_particle_service_name", fix_nearest_fabric_particle_service_name_, std::string("fix_nearest_fabric_particle"));
+    
+    nh_local_.param<std::string>("attach_external_odom_frame_topic_name", attach_external_odom_frame_topic_name_, std::string("attach_external_odom_frame_request"));
+    nh_local_.param<std::string>("attach_external_odom_frame_service_name", attach_external_odom_frame_service_name_, std::string("attach_external_odom_frame"));
 
     nh_local_.param<std::string>("set_fabric_stretching_compliance_service_name", set_fabric_stretching_compliance_service_name_, std::string("set_fabric_stretching_compliance"));
     nh_local_.param<std::string>("set_fabric_bending_compliance_service_name", set_fabric_bending_compliance_service_name_, std::string("set_fabric_bending_compliance"));
@@ -611,6 +625,17 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
                                                             &FabricSimulator::changeParticleDynamicityCb, 
                                                             this);
 
+            // Create a subscriber for handling the requests to fix (stick) particles to the environment
+            sub_fix_nearest_fabric_particle_request_ = nh_.subscribe(fix_nearest_fabric_particle_topic_name_, 
+                                                                1, 
+                                                                &FabricSimulator::fixNearestFabricParticleRequestCb, 
+                                                                this);
+
+            sub_attach_external_odom_frame_request_ = nh_.subscribe(attach_external_odom_frame_topic_name_, 
+                                                                    1, 
+                                                                    &FabricSimulator::attachExternalOdomFrameRequestCb, 
+                                                                    this);
+
             // Create a subscriber for the change fabric compliance topics
             sub_change_stretching_compliance_ = nh_.subscribe(change_fabric_stretching_compliance_topic_name_, 
                                                                 1, 
@@ -639,6 +664,12 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             // Create Services
             set_particle_dynamicity_srv_ = nh_local_.advertiseService(set_particle_dynamicity_service_name_, 
                 &FabricSimulator::setParticleDynamicityCallback, this);
+
+            fix_nearest_fabric_particle_srv_ = nh_local_.advertiseService(fix_nearest_fabric_particle_service_name_, 
+                &FabricSimulator::fixNearestFabricParticleCallback, this);
+
+            attach_external_odom_frame_srv_ = nh_local_.advertiseService(attach_external_odom_frame_service_name_, 
+                &FabricSimulator::attachExternalOdomFrameCallback, this);
 
             set_stretching_compliance_srv_ = nh_local_.advertiseService(set_fabric_stretching_compliance_service_name_,
                             &FabricSimulator::setFabricStretchingComplianceCallback, this);
@@ -760,202 +791,190 @@ void FabricSimulator::reset(){
 }
 
 
-bool FabricSimulator::setParticleDynamicityCallback(fabric_simulator::SetParticleDynamicity::Request &req,
-                                                    fabric_simulator::SetParticleDynamicity::Response &res)
+// Service callback calls the helper and sets the response accordingly.
+bool FabricSimulator::setParticleDynamicityCallback(
+    fabric_simulator::SetParticleDynamicity::Request &req,
+    fabric_simulator::SetParticleDynamicity::Response &res)
 {
-    int particle_id = req.particle_id;
-    bool is_dynamic = req.is_dynamic;
+    bool success = updateParticleDynamicityCommon(req.particle_id, req.is_dynamic);
+    res.success = success;
+    return true;  // Always return true to indicate the service was processed.
+}
 
+// Message callback calls the same helper function.
+void FabricSimulator::changeParticleDynamicityCb(
+    const fabric_simulator::ChangeParticleDynamicity::ConstPtr& msg)
+{
+    updateParticleDynamicityCommon(msg->particle_id, msg->is_dynamic);
+}
+
+// Helper function that contains the common logic.
+bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dynamic) {
+    // Attempt to change dynamicity
     try {
         fabric_.changeParticleDynamicity(particle_id, is_dynamic);
     } catch (const std::out_of_range& e) {
-        ROS_ERROR("Error in setParticleDynamicity: %s", e.what());
-        res.success = false; // Indicate failure
-        return true; // Still return true to indicate the service call was processed
+        ROS_ERROR("Error in updateParticleDynamicityCommon: %s", e.what());
+        return false;
     }
 
     // Update custom_static_particles_ accordingly
     if (is_dynamic) {
-        // Remove particle_id from custom_static_particles_ if it exists
         auto it = std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id);
         if (it != custom_static_particles_.end()) {
             custom_static_particles_.erase(it);
             ROS_INFO("Particle %d set to dynamic and removed from custom_static_particles_", particle_id);
-        }
-        else {
+        } else {
             ROS_INFO("Particle %d not found in custom_static_particles_", particle_id);
         }
     } else {
-        // Add particle_id to custom_static_particles_ if not already present
         if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id) == custom_static_particles_.end()) {
             custom_static_particles_.push_back(particle_id);
             ROS_INFO("Particle %d set to static and added to custom_static_particles_", particle_id);
-        }
-    }
-
-    // Check if a subscriber for this particle ID exists
-    auto sub_iter = custom_static_particles_odom_subscribers_.find(particle_id);
-    auto sub_iter_cmd_vel = custom_static_particles_cmd_vel_subscribers_.find(particle_id);
-
-    if (is_dynamic){  // particle is being tried to set dynamic
-        if (sub_iter != custom_static_particles_odom_subscribers_.end()) {
-            // Subscriber exists, shut it down
-            sub_iter->second.shutdown();
-            custom_static_particles_odom_subscribers_.erase(sub_iter); // Remove the subscriber from the map
-            res.success = true;
-            ROS_INFO("Odom Subscriber for particle %d shut down", particle_id);
         } else {
-            // No subscriber was found for the given ID
-            res.success = false; 
-            ROS_INFO("No odom subscriber found for particle %d", particle_id);
-        }
-
-        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()) {
-            // Subscriber exists, shut it down
-            sub_iter_cmd_vel->second.shutdown();
-            custom_static_particles_cmd_vel_subscribers_.erase(sub_iter_cmd_vel); // Remove the subscriber from the map
-            res.success = true;
-            ROS_INFO("Vel Subscriber for particle %d shut down", particle_id);
-        } else {
-            // No subscriber was found for the given ID
-            res.success = false; 
-            ROS_INFO("No cmd_vel subscriber found for particle %d", particle_id);
-        }
-    }
-    else{ // particle is being tried to set static
-        if (sub_iter != custom_static_particles_odom_subscribers_.end()) {
-            // Subscriber already exists, so just return with success
-            res.success = true;
-            ROS_INFO("Odom Subscriber for particle %d already exists", particle_id);
-        } else {
-            // Subscriber does not exist, create a new one
-            std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
-            ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
-                                [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) { 
-                                    this->odometryCb_custom_static_particles(odom_msg, particle_id); }
-                                );
-            custom_static_particles_odom_subscribers_[particle_id] = sub; // Add the new subscriber to the map
-
-            res.success = true; // Indicate success
-            ROS_INFO("Odom Subscriber for particle %d created", particle_id);
-        }
-
-        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()) {
-            // Subscriber already exists, so just return with success
-            res.success = true;
-            ROS_INFO("Vel Subscriber for particle %d already exists", particle_id);
-        } else {
-            // Subscriber does not exist, create a new one
-            std::string topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);
-            ros::Subscriber sub = nh_.subscribe<geometry_msgs::Twist>(topic, 10,
-                                [this, particle_id](const geometry_msgs::Twist::ConstPtr& twist_msg) { 
-                                    this->cmdVelCb_custom_static_particles(twist_msg, particle_id); }
-                                );
-            custom_static_particles_cmd_vel_subscribers_[particle_id] = sub; // Add the new subscriber to the map
-
-            res.success = true; // Indicate success
-            ROS_INFO("Vel Subscriber for particle %d created", particle_id);
-        }
-    }
-
-    return true;
-}
-
-void FabricSimulator::changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr msg)
-{
-    int particle_id = msg->particle_id;
-    bool is_dynamic = msg->is_dynamic;
-
-    try{
-        fabric_.changeParticleDynamicity(particle_id, is_dynamic);
-    } catch (const std::out_of_range &e){
-        ROS_ERROR("Error in changeParticleDynamicityCb: %s", e.what()); // Indicate failure
-        return;
-    }
-
-    // Update custom_static_particles_ accordingly
-    if (is_dynamic){
-        // Remove particle_id from custom_static_particles_ if it exists
-        auto it = std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id);
-        if (it != custom_static_particles_.end()){
-            custom_static_particles_.erase(it);
-            ROS_INFO("Particle %d set to dynamic and removed from custom_static_particles_", particle_id);
-        }
-        else{
-            ROS_INFO("Particle %d not found in custom_static_particles_", particle_id);
-        }
-    }
-    else{
-        // Add particle_id to custom_static_particles_ if not already present
-        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id) == custom_static_particles_.end()){
-            custom_static_particles_.push_back(particle_id);
-            ROS_INFO("Particle %d set to static and added to custom_static_particles_", particle_id);
-        }
-        else{
             ROS_INFO("Particle %d already in custom_static_particles_", particle_id);
         }
     }
 
-    // Check if a subscriber for this particle ID exists
+    // Manage odom and cmd_vel subscribers
     auto sub_iter = custom_static_particles_odom_subscribers_.find(particle_id);
     auto sub_iter_cmd_vel = custom_static_particles_cmd_vel_subscribers_.find(particle_id);
 
-    if (is_dynamic){ // particle is being tried to set dynamic
-        if (sub_iter != custom_static_particles_odom_subscribers_.end()){
-            // Subscriber exists, shut it down
+    if (is_dynamic) {
+        if (sub_iter != custom_static_particles_odom_subscribers_.end()) {
             sub_iter->second.shutdown();
-            custom_static_particles_odom_subscribers_.erase(sub_iter); // Remove the subscriber from the map
+            custom_static_particles_odom_subscribers_.erase(sub_iter);
             ROS_INFO("Odom Subscriber for particle %d shut down", particle_id);
         } else {
-            // No subscriber was found for the given ID
             ROS_INFO("No odom subscriber found for particle %d", particle_id);
         }
-
-        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()){
-            // Subscriber exists, shut it down
+        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()) {
             sub_iter_cmd_vel->second.shutdown();
-            custom_static_particles_cmd_vel_subscribers_.erase(sub_iter_cmd_vel); // Remove the subscriber from the map
+            custom_static_particles_cmd_vel_subscribers_.erase(sub_iter_cmd_vel);
             ROS_INFO("Vel Subscriber for particle %d shut down", particle_id);
         } else {
-            // No subscriber was found for the given ID
             ROS_INFO("No cmd_vel subscriber found for particle %d", particle_id);
         }
-    }
-    else{ // particle is being tried to set static
-        if (sub_iter != custom_static_particles_odom_subscribers_.end()){
-            // Subscriber already exists, so just return with success
-            ROS_INFO("Odom Subscriber for particle %d already exists", particle_id);
-        } else {
-            // Subscriber does not exist, create a new one
+    } else {
+        if (sub_iter == custom_static_particles_odom_subscribers_.end()) {
             std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
             ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
-                                                                    [this, particle_id](const nav_msgs::Odometry::ConstPtr &odom_msg)
-                                                                    { this->odometryCb_custom_static_particles(odom_msg, particle_id); });
-            custom_static_particles_odom_subscribers_[particle_id] = sub; // Add the new subscriber to the map
+                [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) {
+                    this->odometryCb_custom_static_particles(odom_msg, particle_id);
+                });
+            custom_static_particles_odom_subscribers_[particle_id] = sub;
             ROS_INFO("Odom Subscriber for particle %d created", particle_id);
-        }
-
-        if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()){
-            // Subscriber already exists, so just return with success
-            ROS_INFO("Vel Subscriber for particle %d already exists", particle_id);
         } else {
-            // Subscriber does not exist, create a new one
+            ROS_INFO("Odom Subscriber for particle %d already exists", particle_id);
+        }
+        if (sub_iter_cmd_vel == custom_static_particles_cmd_vel_subscribers_.end()) {
             std::string topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);
             ros::Subscriber sub = nh_.subscribe<geometry_msgs::Twist>(topic, 10,
-                                                                      [this, particle_id](const geometry_msgs::Twist::ConstPtr &twist_msg)
-                                                                      { this->cmdVelCb_custom_static_particles(twist_msg, particle_id); });
-            custom_static_particles_cmd_vel_subscribers_[particle_id] = sub; // Add the new subscriber to the map
+                [this, particle_id](const geometry_msgs::Twist::ConstPtr& twist_msg) {
+                    this->cmdVelCb_custom_static_particles(twist_msg, particle_id);
+                });
+            custom_static_particles_cmd_vel_subscribers_[particle_id] = sub;
             ROS_INFO("Vel Subscriber for particle %d created", particle_id);
+        } else {
+            ROS_INFO("Vel Subscriber for particle %d already exists", particle_id);
         }
     }
+
+    // If everything went smoothly, return success
+    return true;
 }
 
-void FabricSimulator::changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr msg){
+
+// Request callback simply forwards the values to the common function.
+void FabricSimulator::fixNearestFabricParticleRequestCb(const fabric_simulator::FixNearestFabricParticleRequest::ConstPtr& 
+                                                                                fix_nearest_fabric_particle_request_msg)
+{
+    fixNearestFabricParticleCommon(fix_nearest_fabric_particle_request_msg->is_fix,
+                                    fix_nearest_fabric_particle_request_msg->pose);
+}
+
+// Service callback uses the common helper and sets the response accordingly.
+bool FabricSimulator::fixNearestFabricParticleCallback(fabric_simulator::FixNearestFabricParticle::Request &req, 
+                                                        fabric_simulator::FixNearestFabricParticle::Response &res)
+{
+    bool success = fixNearestFabricParticleCommon(req.is_fix, req.pose);
+    res.success = success;
+    return true;
+}
+
+// Common helper that does the actual work.
+bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry_msgs::PoseStamped &pose)
+{
+    // Lock to prevent collisions with the simulation.
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+    
+    // Convert Pose to Eigen position.
+    Eigen::Matrix<Real,1,3> pos(pose.pose.position.x, 
+                                pose.pose.position.y, 
+                                pose.pose.position.z);
+
+    // Convert orientation (if needed).
+    Eigen::Quaternion<Real> ori(pose.pose.orientation.w, 
+                                pose.pose.orientation.x, 
+                                pose.pose.orientation.y, 
+                                pose.pose.orientation.z);
+    ori.normalize();
+
+    // Tell simulation (fabric) to fix/unfix the nearest particles within a radius.
+    std::vector<int> attached_ids;
+    std::vector<Eigen::Matrix<Real,1,3>> attached_rel_poses;
+    fabric_.attachNearestWithRadius(pos, robot_attach_radius_, 
+                                    attached_ids, attached_rel_poses,
+                                    is_fix);
+
+    // Log the results.
+    ROS_INFO("FabricSimulator::fixNearestFabricParticleCommon: radius: %f, "
+                "is_fix: %d, "
+                "requested point: %f %f %f, "
+                "num affected particles: %d", 
+                robot_attach_radius_,
+                is_fix,
+                pos(0), pos(1), pos(2),
+                (int)attached_ids.size());
+    // for (int i = 0; i < attached_ids.size(); ++i) {
+    //     ROS_INFO("FabricSimulator::fixNearestFabricParticleCommon: "
+    //                 "Attached particle id %d with rel pose %f %f %f", 
+    //                 attached_ids[i],
+    //                 attached_rel_poses[i](0),
+    //                 attached_rel_poses[i](1),
+    //                 attached_rel_poses[i](2));
+    // }
+                                    
+    return true;
+}
+
+
+void FabricSimulator::attachExternalOdomFrameRequestCb(const fabric_simulator::AttachExternalOdomFrameRequest::ConstPtr& 
+                                                                                    attach_externa_odom_frame_request_msg)
+{
+    // TODO
+}
+
+bool FabricSimulator::attachExternalOdomFrameCallback(fabric_simulator::AttachExternalOdomFrame::Request &req, 
+                                                        fabric_simulator::AttachExternalOdomFrame::Response &res)
+{
+    // TODO
+    return true;
+}
+
+bool attachExternalOdomFrameCommon()
+{
+    // TODO
+    return true;
+}
+
+
+void FabricSimulator::changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr& msg){
     Real stretching_compliance = msg->data;
     fabric_.setStretchingCompliance(stretching_compliance);
 }
 
-void FabricSimulator::changeBendingComplianceCb(const std_msgs::Float32::ConstPtr msg){
+void FabricSimulator::changeBendingComplianceCb(const std_msgs::Float32::ConstPtr& msg){
     Real bending_compliance = msg->data;
     fabric_.setBendingCompliance(bending_compliance);
 }
@@ -1437,10 +1456,10 @@ void FabricSimulator::createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dyn
     marker.scale.y = point_marker_scale_;
     marker.scale.z = point_marker_scale_;
 
-    marker.color.r = point_marker_color_rgba_[0];
-    marker.color.g = point_marker_color_rgba_[1];
-    marker.color.b = point_marker_color_rgba_[2];
-    marker.color.a = point_marker_color_rgba_[3];
+    // marker.color.r = point_marker_color_rgba_[0];
+    // marker.color.g = point_marker_color_rgba_[1];
+    // marker.color.b = point_marker_color_rgba_[2];
+    // marker.color.a = point_marker_color_rgba_[3];
 
     for (int i = 0; i < poses->rows(); i++) {
         geometry_msgs::Point p;
@@ -1448,6 +1467,22 @@ void FabricSimulator::createRvizPointsMarker(const Eigen::Matrix<Real,Eigen::Dyn
         p.y = (*poses)(i, 1);
         p.z = (*poses)(i, 2);
         marker.points.push_back(p);
+
+        std_msgs::ColorRGBA c;
+        if(fabric_.isStaticParticle(i)) {
+            // Color for static points
+            c.r = static_point_marker_color_rgba_[0];
+            c.g = static_point_marker_color_rgba_[1];
+            c.b = static_point_marker_color_rgba_[2];
+            c.a = static_point_marker_color_rgba_[3];
+        } else {
+            // Color for dynamic points
+            c.r = point_marker_color_rgba_[0];
+            c.g = point_marker_color_rgba_[1];
+            c.b = point_marker_color_rgba_[2];
+            c.a = point_marker_color_rgba_[3];
+        }
+        marker.colors.push_back(c);
     }
 }
 
@@ -1563,14 +1598,14 @@ void FabricSimulator::odometryCb_custom_static_particles(const nav_msgs::Odometr
     const Real qy = odom_msg->pose.pose.orientation.y;
     const Real qz = odom_msg->pose.pose.orientation.z;
     
-    Eigen::Matrix<Real,3,1> pos(x, y, z);
+    Eigen::Matrix<Real,1,3> pos(x, y, z);
     Eigen::Quaternion<Real> ori(qw,qx,qy,qz);
 
     fabric_.updateAttachedVelocity(id, vel);
     fabric_.updateAttachedPose(id, pos);
 }
 
-void FabricSimulator::odometryCb_01(const nav_msgs::Odometry::ConstPtr odom_msg){
+void FabricSimulator::odometryCb_01(const nav_msgs::Odometry::ConstPtr& odom_msg){
     // // With some kind of self lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
@@ -1616,7 +1651,7 @@ void FabricSimulator::odometryCb_01(const nav_msgs::Odometry::ConstPtr odom_msg)
     }
 }
 
-void FabricSimulator::odometryCb_02(const nav_msgs::Odometry::ConstPtr odom_msg){
+void FabricSimulator::odometryCb_02(const nav_msgs::Odometry::ConstPtr& odom_msg){
     // // With some kind of self lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
@@ -1662,7 +1697,7 @@ void FabricSimulator::odometryCb_02(const nav_msgs::Odometry::ConstPtr odom_msg)
     }
 }
 
-void FabricSimulator::odometryCb_03(const nav_msgs::Odometry::ConstPtr odom_msg){
+void FabricSimulator::odometryCb_03(const nav_msgs::Odometry::ConstPtr& odom_msg){
     // // With some kind of self lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
@@ -1708,7 +1743,7 @@ void FabricSimulator::odometryCb_03(const nav_msgs::Odometry::ConstPtr odom_msg)
     }
 }
 
-void FabricSimulator::odometryCb_04(const nav_msgs::Odometry::ConstPtr odom_msg){
+void FabricSimulator::odometryCb_04(const nav_msgs::Odometry::ConstPtr& odom_msg){
     // // With some kind of self lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
 

@@ -74,7 +74,8 @@
         "variant": "cpp",
         "regex": "cpp",
         "future": "cpp",
-        "forward_list": "cpp"
+        "forward_list": "cpp",
+        "core": "cpp"
     },
     "window.zoomLevel": -1
 }

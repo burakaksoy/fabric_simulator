@@ -81,6 +81,12 @@ custom_static_particles_odom_topic_prefix: "custom_static_particles_odom_"
 set_particle_dynamicity_service_name: "set_particle_dynamicity" 
 change_particle_dynamicity_topic_name: "change_particle_dynamicity" 
 
+fix_nearest_fabric_particle_topic_name: "fix_nearest_fabric_particle_request"
+fix_nearest_fabric_particle_service_name: "fix_nearest_fabric_particle"
+
+attach_external_odom_frame_topic_name: "attach_external_odom_frame_request"
+attach_external_odom_frame_service_name: "attach_external_odom_frame"
+
 simulation_rate: 333.333 #1000.0
 rendering_rate: 30.0 # Hz, frequency to publish the fabric vertices, edges and triangle mesh to RVIZ visualization markers
 
@@ -110,7 +116,8 @@ fabric_markers_topic_name: "fabric_markers" # topic name to publish the RVIZ vis
 fabric_visualization_mode: 4 # 0: Points Only, 1: Wireframe Only, 2: Mesh Only, 3: Points and Wireframe, 4: All
 # Note that using less data in the visualization helps to save network bandwith
 point_marker_scale: 0.015
-point_marker_color_rgba: [1.0, 0.5, 1.0, 1.0]
+point_marker_color_rgba: [1.0, 0.5, 1.0, 0.7]
+static_point_marker_color_rgba: [0.0, 1.0, 0.0, 1.0]
 line_marker_scale_multiplier: 1.0 # multiplies 5 mm with this scale
 line_marker_color_rgba: [0.0, 0.0, 0.0, 0.5] # Outline of the fabric mesh lines
 mesh_marker_color_rgba: [0.25, 0.5, 1.0, 1.0] # [0.25, 0.5, 0.5, 1.0] # Inner region of the fabric mesh lines
@@ -151,7 +158,7 @@ wrench_04_frame_id: "d4_tf_fabric_mount_link"
 
 fabric_rob_z_offset_: 0.0 # z offset between the specified frame and fabric attachement
 
-robot_attach_radius: 0.35
+robot_attach_radius: 0.1 #0.35
 
 # Published topic names of the forces of    robots.
 wrench_01_topic_name: "d1/fabric_wrench_stamped"

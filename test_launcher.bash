@@ -14,6 +14,9 @@ gnome-terminal --tab --title="Test GUI" --command "bash -c \"source ~/.bashrc; r
 sleep 1s;
 
 # Use it to publish spacenav_twist msg
+gnome-terminal --tab --title="Spacenav" --command "bash -c \"source ~/.bashrc; roslaunch spacenav_node classic.launch; exec bash\"";
+# sleep 1s;
+
 gnome-terminal --tab --title="RQT EZ Pub" --command "bash -c \"source ~/.bashrc; rosrun rqt_ez_publisher rqt_ez_publisher; exec bash\"";
 sleep 1s;
 

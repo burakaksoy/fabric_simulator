@@ -11,12 +11,14 @@ import PyQt5.QtWidgets as qt_widgets
 import PyQt5.QtCore as qt_core
 from PyQt5.QtCore import Qt
 
-from geometry_msgs.msg import Twist, Point, Quaternion, Pose
+from geometry_msgs.msg import Twist, Point, Quaternion, Pose, PoseStamped
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker
 
 from fabric_simulator.msg import SegmentStateArray
 from fabric_simulator.msg import ChangeParticleDynamicity
+from fabric_simulator.msg import AttachExternalOdomFrameRequest
+from fabric_simulator.msg import FixNearestFabricParticleRequest
 
 from fabric_simulator.srv import GetFabricStretchingCompliance
 from fabric_simulator.srv import GetFabricBendingCompliance
@@ -123,7 +125,12 @@ class TestGUI(qt_widgets.QWidget):
         self.sub_twist = rospy.Subscriber("/spacenav/twist", Twist, self.spacenav_twist_callback, queue_size=1)
         self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, self.state_array_callback, queue_size=1)
 
-        self.pub_change_dynamicity = rospy.Publisher("/change_particle_dynamicity", ChangeParticleDynamicity, queue_size=1)
+        self.pub_change_dynamicity = rospy.Publisher("/change_particle_dynamicity", 
+                                                        ChangeParticleDynamicity, queue_size=1)
+        self.pub_attach_hand_to_fabric = rospy.Publisher("/attach_external_odom_frame_request", 
+                                                            AttachExternalOdomFrameRequest, queue_size=1)
+        self.pub_stick_nearest_fabric_particle = rospy.Publisher("/fix_nearest_fabric_particle_request", 
+                                                                    FixNearestFabricParticleRequest, queue_size=1)
 
         self.last_timestep_requests = {}
 
@@ -290,13 +297,13 @@ class TestGUI(qt_widgets.QWidget):
                 # Create Attach hand to fabric button
                 attach_to_fabric_button = qt_widgets.QPushButton()
                 attach_to_fabric_button.setText("Attach to Fabric")
-                attach_to_fabric_button.clicked.connect(lambda _, p=particle: self.attach_to_fabric_cb(p))
+                attach_to_fabric_button.clicked.connect(lambda _, p=particle: self.attach_hand_to_fabric_cb(p, is_attach=True))
                 row_layout.addWidget(attach_to_fabric_button)
                 
                 # Create Detach hand from fabric button
                 detach_from_fabric_button = qt_widgets.QPushButton()
                 detach_from_fabric_button.setText("Detach from Fabric")
-                detach_from_fabric_button.clicked.connect(lambda _, p=particle: self.detach_from_fabric_cb(p))
+                detach_from_fabric_button.clicked.connect(lambda _, p=particle: self.attach_hand_to_fabric_cb(p, is_attach=False))
                 row_layout.addWidget(detach_from_fabric_button)
                 
                 # Create a vertical line here
@@ -305,13 +312,13 @@ class TestGUI(qt_widgets.QWidget):
                 # Create Stick (object to mandrel) button
                 stick_button = qt_widgets.QPushButton()
                 stick_button.setText("Stick")
-                stick_button.clicked.connect(lambda _, p=particle: self.stick_cb(p))
+                stick_button.clicked.connect(lambda _, p=particle: self.stick_nearest_fabric_particle_cb(p, is_stick=True))
                 row_layout.addWidget(stick_button)
                 
                 # Create Unstick (object from mandrel) button
                 unstick_button = qt_widgets.QPushButton()
                 unstick_button.setText("Unstick")
-                unstick_button.clicked.connect(lambda _, p=particle: self.unstick_cb(p))
+                unstick_button.clicked.connect(lambda _, p=particle: self.stick_nearest_fabric_particle_cb(p, is_stick=False))
                 row_layout.addWidget(unstick_button)
                 
             # ------------------------------------------------------------------------------------
@@ -1095,6 +1102,33 @@ class TestGUI(qt_widgets.QWidget):
         else:
             rospy.logwarn("There is no particle to calculate the centroid.")
 
+    def attach_hand_to_fabric_cb(self, particle, is_attach):
+        rospy.loginfo(f"Attach hand odometry frame to fabric: {is_attach}")
+        rospy.loginfo(f"particle: {particle}")
+        rospy.loginfo(f"odom_topic: {self.odom_publishers[particle].resolved_name}")
+        
+        # Publish the topic    
+        msg = AttachExternalOdomFrameRequest()
+        msg.is_attach = is_attach
+        msg.odom_topic = self.odom_publishers[particle].resolved_name
+        self.pub_attach_hand_to_fabric.publish(msg)
+
+    def stick_nearest_fabric_particle_cb(self, particle, is_stick):
+        rospy.loginfo(f"Stick nearest fabric particle: {is_stick}")
+        rospy.loginfo(f"particle: {particle}")
+        rospy.loginfo(f"position: {self.particle_positions[particle]}")
+        rospy.loginfo(f"orientation: {self.particle_orientations[particle]}")
+        
+        # Publish the topic    
+        msg = FixNearestFabricParticleRequest()
+        msg.is_fix = is_stick        
+        msg.pose.header.frame_id = "map" # Note that pose is poseStamped msg type
+        msg.pose.header.stamp = rospy.Time.now()
+        msg.pose.pose.position = self.particle_positions[particle]
+        msg.pose.pose.orientation = self.particle_orientations[particle]
+        
+        self.pub_stick_nearest_fabric_particle.publish(msg)
+        
     def odom_pub_timer_callback(self,event):
         # Reset spacenav_twist to zero if it's been long time since the last arrived
         self.check_spacenav_twist_wait_timeout()
@@ -1163,7 +1197,6 @@ class TestGUI(qt_widgets.QWidget):
                 odom.pose.pose = pose
                 odom.twist.twist = self.spacenav_twist
                 self.odom_publishers[particle].publish(odom)
-
 
     def change_dynamicity_cb(self,particle, is_dynamic):
         msg = ChangeParticleDynamicity()

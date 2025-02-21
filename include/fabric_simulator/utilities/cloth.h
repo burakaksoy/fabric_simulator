@@ -108,7 +108,8 @@ public:
 
     void attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
                                     std::vector<int> &ids,
-                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses);
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                    bool is_attach=true);
 
     void updateAttachedPoses(const std::vector<int> &ids,
                                 const Eigen::Matrix<Real,1,3> &pos,
