@@ -596,6 +596,12 @@ class TestGUI(qt_widgets.QWidget):
         odom = Odometry()
         odom.header.stamp = rospy.Time.now()
         odom.header.frame_id = "map" 
+        
+        if particle in self.binded_particles:
+            odom.child_frame_id = f"{particle}_odom"
+        if particle in self.custom_static_particles:
+            odom.child_frame_id = f"particle_{particle}_odom"
+        
         odom.pose.pose = pose
 
         self.odom_publishers[particle].publish(odom)
@@ -652,6 +658,12 @@ class TestGUI(qt_widgets.QWidget):
         odom = Odometry()
         odom.header.stamp = rospy.Time.now()
         odom.header.frame_id = "map" 
+        
+        if particle in self.binded_particles:
+            odom.child_frame_id = f"{particle}_odom"
+        if particle in self.custom_static_particles:
+            odom.child_frame_id = f"particle_{particle}_odom"
+        
         odom.pose.pose = pose
 
         self.odom_publishers[particle].publish(odom)
@@ -811,6 +823,11 @@ class TestGUI(qt_widgets.QWidget):
                 odom = Odometry()
                 odom.header.stamp = rospy.Time.now()
                 odom.header.frame_id = "map"
+                
+                if particle in self.binded_particles:
+                    odom.child_frame_id = f"{particle}_odom"
+                if particle in self.custom_static_particles:
+                    odom.child_frame_id = f"particle_{particle}_odom"
                 
                 odom.pose.pose.position = new_position
                 odom.pose.pose.orientation = new_orientation
@@ -1096,6 +1113,12 @@ class TestGUI(qt_widgets.QWidget):
             odom = Odometry()
             odom.header.stamp = rospy.Time.now()
             odom.header.frame_id = "map" 
+            
+            if particle in self.binded_particles:
+                odom.child_frame_id = f"{particle}_odom"
+            if particle in self.custom_static_particles:
+                odom.child_frame_id = f"particle_{particle}_odom"
+            
             odom.pose.pose = pose
 
             self.odom_publishers[particle_to_send].publish(odom)
@@ -1194,6 +1217,12 @@ class TestGUI(qt_widgets.QWidget):
                 odom = Odometry()
                 odom.header.stamp = rospy.Time.now()
                 odom.header.frame_id = "map" 
+                
+                if particle in self.binded_particles:
+                    odom.child_frame_id = f"{particle}_odom"
+                if particle in self.custom_static_particles:
+                    odom.child_frame_id = f"particle_{particle}_odom"
+                
                 odom.pose.pose = pose
                 odom.twist.twist = self.spacenav_twist
                 self.odom_publishers[particle].publish(odom)
