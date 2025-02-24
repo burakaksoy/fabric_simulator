@@ -171,14 +171,15 @@ private:
     std::vector<bool> is_dynamic_; // vector that holds the data whether the particle is dynamic or not
 
     Real density_; // fabric mass per meter square (kg/m^2)
-    Eigen::Matrix<Real,1,3> grads_;
+    Eigen::Matrix<Real,1,3> grads_; // gradient vector of the each constraint for each particle
 
     Eigen::MatrixX2i stretching_ids_;
     Eigen::MatrixX4i bending_ids_;
     Eigen::Matrix<Real,1,Eigen::Dynamic> stretching_lengths_;
     Eigen::Matrix<Real,1,Eigen::Dynamic> bending_lengths_;
 
-    std::vector<Eigen::Matrix<Real,6,1>> Lambda_;
+    std::vector<Real> Lambda_stretching_;
+    std::vector<Real> Lambda_bending_;
 
     Real stretching_compliance_;
     Real bending_compliance_;

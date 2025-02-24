@@ -95,7 +95,9 @@ Cloth::Cloth(const Mesh &mesh,
     stretching_lengths_ = Eigen::Matrix<Real,1,Eigen::Dynamic>::Zero(stretching_ids_.rows()); //assigned at initPhysics
     bending_lengths_ = Eigen::Matrix<Real,1,Eigen::Dynamic>::Zero(bending_ids_.rows()); //assigned at initPhysics
 
-    // Lambda_.assign(stretching_ids_.rows(),Eigen::Matrix<Real,6,1>::Zero()); // TODO: Is lambda_ necessary?
+    // Is lambda_ necessary? Answer: When using more than 1 steps, yes as explained in the XPBD paper (2016); Not necessary for 1 step and when small substeps method (2019) is used.
+    Lambda_stretching_.assign(stretching_ids_.rows(),0.0); 
+    Lambda_bending_.assign(bending_ids_.rows(),0.0); 
 
     // attached_ids_  //Initially empty vector of integers to store the ids of attached (fixed) particles.
 
@@ -269,37 +271,42 @@ void Cloth::solveStretching(const Real &compliance, const Real &dt){
             continue;
         }
 
+        // grads_ stores the gradient of the constraint function
         grads_ = pos_.row(id0) - pos_.row(id1);
-
         Real len = grads_.norm();
-        // if (len <= static_cast<Real>(1e-13)){
-        //     continue;
-        // }
 
-        grads_ = grads_ / len;
-
-        // std::cout << "grads_: " << grads_ << std::endl;
+        // If the length is too small, set the gradient to zero
+        if (len <= static_cast<Real>(1e-13)){
+            grads_ = Eigen::Matrix<Real,1,3>::Zero();
+        } else {
+            grads_ = grads_ / len;
+        }
 
         Real &rest_len = stretching_lengths_(i);
-        Real C = len - rest_len;
+        Real C = len - rest_len; // constraint
         Real K = w+alpha;
+        Real &lambda = Lambda_stretching_[i];
         
-        // if (std::fabs(K) <= static_cast<Real>(1e-13)){
-        //     continue;
-        // } 
+        // Initialize delta_lambda to zero
+        Real delta_lambda = 0.0;
+        // Only update lambda if K is not too small
+        if (std::fabs(K) > static_cast<Real>(1e-13)){
+            delta_lambda = -(C + lambda*alpha) / K; 
+        }
 
-        Real s = -C / K; // lambda
+        // update lambda
+        lambda += delta_lambda; 
 
         // Position corrections
         if (isDynamic0){
-            pos_.row(id0) += s*w0*grads_;
+            pos_.row(id0) += delta_lambda*w0*grads_;
         }
         if (isDynamic1){
-            pos_.row(id1) += -s*w1*grads_;
+            pos_.row(id1) += -delta_lambda*w1*grads_;
         }
         
         // Force calculation
-        Real f = (s / (dt*dt)); 
+        Real f = (lambda / (dt*dt)); 
         for_.row(id0) += f*grads_;
         for_.row(id1) += -f*grads_;
     }
@@ -327,32 +334,44 @@ void Cloth::solveBending(const Real &compliance, const Real &dt){
             continue;
         }
 
+        // grads_ stores the gradient of the constraint function
         grads_ = pos_.row(id0) - pos_.row(id1);
-
         Real len = grads_.norm();
-        // if (len < static_cast<Real>(1e-13)){
-        //     continue;
-        // }
 
-        grads_ = grads_ / len;
+        // If the length is too small, set the gradient to zero
+        if (len <= static_cast<Real>(1e-13)){
+            grads_ = Eigen::Matrix<Real,1,3>::Zero();
+        } else {
+            grads_ = grads_ / len;
+        }
 
         Real &rest_len = bending_lengths_(i);
-        Real C = len - rest_len;
+        Real C = len - rest_len; // constraint
         Real K = w+alpha;
+        Real &lambda = Lambda_bending_[i];
     
-        // if (std::fabs(K) <= static_cast<Real>(1e-13)){
-        //     continue;
-        // } 
+        // Initialize delta_lambda to zero
+        Real delta_lambda = 0.0;
+        // Only update lambda if K is not too small
+        if (std::fabs(K) > static_cast<Real>(1e-13)){
+            delta_lambda = -(C + lambda*alpha) / K; 
+        }
 
-        Real s = -C / K; // lambda
+        // update lambda
+        lambda += delta_lambda; 
 
         // Position corrections
         if (isDynamic0){
-            pos_.row(id0) += s*w0*grads_;
+            pos_.row(id0) += delta_lambda*w0*grads_;
         }
         if (isDynamic1){
-            pos_.row(id1) += -s*w1*grads_;
+            pos_.row(id1) += -delta_lambda*w1*grads_;
         }
+
+        // Force calculation
+        Real f = (lambda / (dt*dt)); 
+        for_.row(id0) += f*grads_;
+        for_.row(id1) += -f*grads_;
     }
 }
 
@@ -569,9 +588,11 @@ void Cloth::resetForces(){
 
 void Cloth::resetLambdas(){
     // Reset the lambdas for the next iteration
-    for (auto& lambda : Lambda_) {
-        lambda.setZero();
-    }
+    // for (auto& lambda : Lambda_stretching_) {
+    //     lambda.setZero();
+    // }
+    Lambda_stretching_.assign(stretching_ids_.rows(),0.0); 
+    Lambda_bending_.assign(bending_ids_.rows(),0.0); 
 }
 
 void Cloth::normalizeForces(const int &num_substeps){

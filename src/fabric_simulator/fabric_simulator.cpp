@@ -859,9 +859,9 @@ bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dy
         if (sub_iter == custom_static_particles_odom_subscribers_.end()) {
             std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
             ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
-                [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) {
-                    this->odometryCb_custom_static_particles(odom_msg, particle_id);
-                });
+                                                                    [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) {
+                                                                        this->odometryCb_custom_static_particles(odom_msg, particle_id);
+                                                                    });
             custom_static_particles_odom_subscribers_[particle_id] = sub;
             ROS_INFO("Odom Subscriber for particle %d created", particle_id);
         } else {
@@ -2240,7 +2240,7 @@ void FabricSimulator::publishFabricState(const ros::TimerEvent& e){
     const Eigen::Matrix<Real,Eigen::Dynamic,3> &vel_ptr = *fabric_.getVelPtr();
     const Eigen::Matrix<Real,Eigen::Dynamic,3> &for_ptr = *fabric_.getForPtr();
 
-    for (int i = 0; i < pos_ptr.rows(); i++) {
+    for (size_t i = 0; i < pos_ptr.rows(); i++) {
         fabric_simulator::SegmentState segment_state;
 
         // Set the segment id
