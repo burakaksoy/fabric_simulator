@@ -9,6 +9,7 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
+#include <unordered_set>
 #include <unordered_map> 
 #include <algorithm>    // std::sort, std::find
 
@@ -116,6 +117,12 @@ public:
                                     std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
                                     bool is_attach=true);
 
+    void attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+                                    std::vector<int> &ids,
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                    std::unordered_set<int> &sticked_ids,
+                                    bool is_attach=true);
+
     void updateAttachedPoses(const std::vector<int> &ids,
                                 const Eigen::Matrix<Real,1,3> &pos,
                                 const std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
@@ -190,14 +197,8 @@ private:
     Real global_damp_coeff_v_; 
 
     // May not be necessary?
-    // Eigen::RowVectorXi attached_ids_; // ids of robot attached particles
     std::vector<int> attached_ids_; // ids of robot attached particles
 
-    // int grab_id_;
-    // Real grab_inv_mass_;
-    
-    // to debug:
-    // int only_once;
 };
 
 } // namespace pbd_object

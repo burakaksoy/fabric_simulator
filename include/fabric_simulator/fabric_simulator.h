@@ -38,6 +38,7 @@
 #include <math.h>
 #include <numeric>
 #include <vector>
+#include <unordered_set>
 #include <chrono>
 
 #include <Eigen/Dense>
@@ -157,6 +158,9 @@ private:
 
     void publishWrenchesOnExternalOdoms(const ros::TimerEvent& e);
     void publishZeroWrenches();
+
+    void checkStickedParticleForces();
+
     void renderRigidBodies(const ros::TimerEvent& e);
 
     void publishMinDistancesToRigidBodies(const ros::TimerEvent& e);
@@ -426,6 +430,11 @@ private:
     std::vector<int> rob_02_attached_ids_;
     std::vector<int> rob_03_attached_ids_;
     std::vector<int> rob_04_attached_ids_;
+
+    std::unordered_set<int> sticked_ids_;
+
+    Eigen::Matrix<Real, 1, 3> max_sticking_force_;
+    int max_sticking_force_check_mode_;
 
     std::vector<Eigen::Matrix<Real,1,3>> rob_01_attached_rel_poses_;
     std::vector<Eigen::Matrix<Real,1,3>> rob_02_attached_rel_poses_;

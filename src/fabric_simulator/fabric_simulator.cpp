@@ -177,6 +177,9 @@ FabricSimulator::~FabricSimulator() {
 
     nh_local_.deleteParam("min_dist_line_marker_color_rgba");
 
+    nh_local_.deleteParam("max_sticking_force");
+    nh_local_.deleteParam("max_sticking_force_check_mode");
+
     delete collision_handler_;
 }
 
@@ -310,6 +313,12 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     nh_local_.param<Real>("min_dist_line_marker_scale_multiplier", min_dist_line_marker_scale_multiplier_, 1.0);
 
     nh_local_.param("min_dist_line_marker_color_rgba", min_dist_line_marker_color_rgba_, std::vector<Real>({0.0, 0.0, 0.0, 0.5}));
+
+    std::vector<Real> max_sticking_force;
+    nh_local_.param("max_sticking_force", max_sticking_force, std::vector<Real>({100.0, 100.0, 100.0}));
+    max_sticking_force_ = Eigen::Map<Eigen::Matrix<Real, 1, 3>>(max_sticking_force.data());
+
+    nh_local_.param<int>("max_sticking_force_check_mode", max_sticking_force_check_mode_, -1); // -1: Disabled, 0:X, 1:Y, 2:Z, 3:Norm
 
     // Set timer periods based on the parameters
     timer_render_.setPeriod(ros::Duration(1.0/rendering_rate_));
@@ -926,10 +935,11 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
     ori.normalize();
 
     // Tell simulation (fabric) to fix/unfix the nearest particles within a radius.
-    std::vector<int> attached_ids;
-    std::vector<Eigen::Matrix<Real,1,3>> attached_rel_poses;
+    std::vector<int> affected_ids;
+    std::vector<Eigen::Matrix<Real,1,3>> affected_rel_poses;
     fabric_.attachWithinRadius(pos, robot_attach_radius_, 
-                                    attached_ids, attached_rel_poses,
+                                    affected_ids, affected_rel_poses,
+                                    sticked_ids_,
                                     is_fix);
 
     // Log the results.
@@ -940,14 +950,14 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
                 robot_attach_radius_,
                 is_fix,
                 pos(0), pos(1), pos(2),
-                (int)attached_ids.size());
+                (int)affected_ids.size());
     // for (int i = 0; i < attached_ids.size(); ++i) {
     //     ROS_INFO("FabricSimulator::fixNearestFabricParticleCommon: "
     //                 "Attached particle id %d with rel pose %f %f %f", 
-    //                 attached_ids[i],
-    //                 attached_rel_poses[i](0),
-    //                 attached_rel_poses[i](1),
-    //                 attached_rel_poses[i](2));
+    //                 affected_ids[i],
+    //                 affected_rel_poses[i](0),
+    //                 affected_rel_poses[i](1),
+    //                 affected_rel_poses[i](2));
     // }
                                     
     return true;
@@ -1422,6 +1432,8 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
     
     // +++++++++++++++++++++++++++++++++++++++++++++++++++==
     readAttachedRobotForces();
+
+    checkStickedParticleForces(); // Remove sticked particles if the forces are too high
     // +++++++++++++++++++++++++++++++++++++++++++++++++++==
 
     // std::chrono::high_resolution_clock::time_point finish_time = high_resolution_clock::now();
@@ -2100,7 +2112,64 @@ void FabricSimulator::publishZeroWrenches(){
     }    
 }
 
+void FabricSimulator::checkStickedParticleForces()
+{
+    // Access the forces
+    const Eigen::Matrix<Real,Eigen::Dynamic,3> &for_ptr = *fabric_.getForPtr();
 
+    // Vector to store the particles to unstick
+    std::vector<int> particles_to_unstick;
+
+    // If the force check mode is invalid
+    if (max_sticking_force_check_mode_ < 0 || max_sticking_force_check_mode_ > 3) {
+        ROS_WARN("Invalid force_check_mode value. Disabling the force check to unstick.");
+        max_sticking_force_check_mode_ = -1;
+        return;
+    }
+
+    // Check forces on sticked particles
+    for (int sticked_id : sticked_ids_) {
+        const Eigen::Matrix<Real,1,3> &force = for_ptr.row(sticked_id);
+
+        bool detach = false;
+        switch(max_sticking_force_check_mode_) {
+            case 0: // x
+                detach = (force(0) > max_sticking_force_(0));
+                break;
+            case 1: // y
+                detach = (force(1) > max_sticking_force_(1));
+                break;
+            case 2: // z
+                detach = (force(2) > max_sticking_force_(2));
+                break;
+            case 3: // norm
+                detach = (force.norm() > max_sticking_force_.norm());
+                break;
+            default:
+                detach = (force(2) > max_sticking_force_(2));
+                break;
+        }
+
+        if (detach) {
+            particles_to_unstick.push_back(sticked_id);
+        }
+    }
+
+    if (!particles_to_unstick.empty()) {
+        std::string particles_to_unstick_str;
+        for (int id_to_remove : particles_to_unstick) {
+            // Remove IDs from the set
+            sticked_ids_.erase(id_to_remove);
+            // Build a log string
+            particles_to_unstick_str += std::to_string(id_to_remove) + ", ";
+        }
+        // ROS_INFO("Max force: %f, %f, %f", max_sticking_force_(0), max_sticking_force_(1), max_sticking_force_(2));
+        ROS_INFO("Particles to unstick: %s", particles_to_unstick_str.c_str());
+
+        // Finally unstick the particles
+        fabric_.setDynamicParticles(particles_to_unstick);
+    }
+}
 
 // Publish message to RVIZ to visualize the rigid bodies considered in the simulation
 void FabricSimulator::renderRigidBodies(const ros::TimerEvent& e){

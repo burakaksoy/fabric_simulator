@@ -243,8 +243,11 @@ void Cloth::findPositionVectorsAndIdsInSphere(const Eigen::Matrix<Real,Eigen::Dy
             Eigen::Matrix<Real,1,3> relPos = (currentPos - center); 
             Real currentDistance = relPos.norm();
             if (currentDistance < radius) {
-                ids.push_back(i);
-                rel_poses.push_back(relPos);
+                // Only add the particle if it is not already in the list
+                if (std::find(ids.begin(), ids.end(), i) == ids.end()) {
+                    ids.push_back(i);
+                    rel_poses.push_back(relPos);
+                }
             }
         }
     }
@@ -623,8 +626,11 @@ void Cloth::attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Re
     int id = findNearestPositionVectorId(pos_,pos);
     if (id != -1)
     {
-        ids.push_back(id);
-        rel_poses.push_back(Eigen::Matrix<Real,1,3>(0.0, 0.0, 0.0));
+        // Only push back if id is not already in the vector
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            ids.push_back(id);
+            rel_poses.push_back(Eigen::Matrix<Real,1,3>(0.0, 0.0, 0.0));
+        }
 
         // if (r <= 0), Only attach the nearest to given pose
         if (r > 0){ // Attach all within the specified circle
@@ -661,8 +667,11 @@ void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r
             Eigen::Matrix<Real,1,3> relPos = (currentPos - pos); 
             Real currentDistance = relPos.norm();
             if (currentDistance < r) {
-                ids.push_back(i);
-                rel_poses.push_back(relPos);
+                // Only add the particle if it is not already in the list
+                if (std::find(ids.begin(), ids.end(), i) == ids.end()) {
+                    ids.push_back(i);
+                    rel_poses.push_back(relPos);
+                }
             }
         }
     }
@@ -672,6 +681,69 @@ void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r
         setStaticParticles(ids);
     }
     else{
+        // Make those particles dynamic
+        setDynamicParticles(ids);
+    }
+}
+
+void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+                                    std::vector<int> &ids,
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                    std::unordered_set<int> &sticked_ids,
+                                    bool is_attach){
+    // Attaches/Detaches the particles that is inside a sphere defined with radius r parallel with center pos
+
+
+    // if (r <= 0), Only attach the nearest to given pose
+    if (r > 0){ // Attach all within the specified circle
+        // Find all the ids within the radius around the given pos and their relative poses
+        // findPositionVectorsAndIdsInSphere(pos_, r, ids, rel_poses);
+        for (int i = 0; i < pos_.rows(); i++) {
+            Eigen::Matrix<Real,1,3> currentPos = pos_.row(i).transpose();
+            Eigen::Matrix<Real,1,3> relPos = (currentPos - pos); 
+            Real currentDistance = relPos.norm();
+            if (currentDistance < r) {
+                // Only add the particle if it is not already in the list
+                if (std::find(ids.begin(), ids.end(), i) == ids.end()) {
+                    ids.push_back(i);
+                    rel_poses.push_back(relPos);
+                }
+            }
+        }
+    }
+
+    // Add attached ids to the sticked_ids unordered set
+    if (is_attach) {
+        for (int i = 0; i < ids.size(); ++i) {
+            // If the id is not already in the set, add it
+            // otherwise, remove it from the ids and rel_poses vectors
+            if (sticked_ids.find(ids[i]) == sticked_ids.end()) {
+                sticked_ids.insert(ids[i]);
+            } else {
+                ids.erase(ids.begin() + i);
+                rel_poses.erase(rel_poses.begin() + i);
+                i--;
+            }
+        }
+    } else { // Detach
+        for (int i = 0; i < ids.size(); ++i) {
+            // If the id is not already in the set, remove it from the ids and rel_poses vectors
+            // otherwise, remove it from the sticked_ids set
+            if (sticked_ids.find(ids[i]) == sticked_ids.end()) {
+                ids.erase(ids.begin() + i);
+                rel_poses.erase(rel_poses.begin() + i);
+                i--;
+            } else {
+                sticked_ids.erase(ids[i]);
+            }
+        }
+    }
+
+    if (is_attach){
+        // Make those particles stationary
+        setStaticParticles(ids);
+    }
+    else{ // Detach
         // Make those particles dynamic
         setDynamicParticles(ids);
     }
