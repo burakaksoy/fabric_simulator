@@ -111,6 +111,11 @@ public:
                                     std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
                                     bool is_attach=true);
 
+    void attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+                                    std::vector<int> &ids,
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                    bool is_attach=true);
+
     void updateAttachedPoses(const std::vector<int> &ids,
                                 const Eigen::Matrix<Real,1,3> &pos,
                                 const std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
@@ -134,8 +139,6 @@ public:
     std::vector<int> *getAttachedIdsPtr();
 
     void resetForces();
-
-    void normalizeForces(const int &num_substeps);
 
     void resetLambdas();
 

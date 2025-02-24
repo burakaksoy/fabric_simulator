@@ -63,6 +63,28 @@
 namespace fabric_simulator
 {
 
+struct ExternalOdomAttachment
+{
+    // The topic on which we listen for Odometry
+    std::string odom_topic;
+    
+    // The subscription to that odom topic
+    ros::Subscriber odom_sub;
+    
+    // The wrench-stamped publisher and the frame to use for that wrench
+    std::string wrench_frame_id;
+    ros::Publisher wrench_pub;
+    
+    // Attachment data
+    bool is_attached{false};          // whether or not the fabric is actually attached
+    int attached_id{-1};              // single attached particle if you do single ID attach
+    std::vector<int> attached_ids;    // if you do multi-ID attach
+    std::vector<Eigen::Matrix<Real,1,3>> attached_rel_poses;
+    Eigen::Matrix<Real,1,3> attached_force{0,0,0};
+    // TODO: Add torque as well
+    Eigen::Quaterniond attached_orient{1,0,0,0}; // last known orientation, for example
+};
+
 class FabricSimulator
 {
     // friend class utilities::CollisionHandler; // Allow CollisionHandler to access all private data of the fabric simulator
@@ -133,7 +155,7 @@ private:
                         ros::Publisher& publisher,
                         int marker_id);
 
-    void publishWrenches(const ros::TimerEvent& e);
+    void publishWrenchesOnExternalOdoms(const ros::TimerEvent& e);
     void publishZeroWrenches();
     void renderRigidBodies(const ros::TimerEvent& e);
 
@@ -149,8 +171,9 @@ private:
     void odometryCb_04(const nav_msgs::Odometry::ConstPtr& odom_msg);
 
     void odometryCb_custom_static_particles(const nav_msgs::Odometry::ConstPtr& odom_msg, const int& id);
-
     void cmdVelCb_custom_static_particles(const geometry_msgs::Twist::ConstPtr& twist_msg, const int& id);
+
+    void odometryCb_external(const nav_msgs::Odometry::ConstPtr& odom_msg, const std::string& topic);
 
     // Change Dynamicity callback function
     void changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr& change_particle_dynamicity_msg);
@@ -160,7 +183,7 @@ private:
     bool fixNearestFabricParticleCommon(bool is_fix, const geometry_msgs::PoseStamped &pose);
 
     void attachExternalOdomFrameRequestCb(const fabric_simulator::AttachExternalOdomFrameRequest::ConstPtr& attach_externa_odom_frame_request_msg);
-    bool attachExternalOdomFrameCommon();
+    bool attachExternalOdomFrameCommon(const std::string & odom_topic, bool is_attach);
 
     // Change Stretching Compliance and Bending Compliance callback functions
     void changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr& stretching_compliance_msg);
@@ -244,6 +267,8 @@ private:
     // Map to hold particle ID and its corresponding subscriber
     std::map<int, ros::Subscriber> custom_static_particles_odom_subscribers_;
     std::map<int, ros::Subscriber> custom_static_particles_cmd_vel_subscribers_;
+
+    std::map<std::string, ExternalOdomAttachment> external_odom_attachments_;
 
     ros::Timer timer_render_;
     ros::Timer timer_simulate_;

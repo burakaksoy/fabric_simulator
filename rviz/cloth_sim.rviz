@@ -453,6 +453,114 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: Group-Odom-hands
+    - Class: rviz/Group
+      Displays:
+        - Class: rviz_odom_trail_plugin/OdomTrail
+          Enabled: true
+          Line Alpha: 0.6000000238418579
+          Line Color: 255; 128; 0
+          Line Width: 0.009999999776482582
+          Max Points: 100
+          Min Distance: 0.0010000000474974513
+          Name: OdomTrail-Robot1-Right
+          Queue Size: 10
+          Show Sphere: true
+          Show Text: true
+          Sphere Alpha: 0.800000011920929
+          Sphere Color: 255; 128; 0
+          Sphere Scale: 0.20000000298023224
+          Text: Robot 1
+          Text Alpha: 1
+          Text Color: 20; 20; 20
+          Text Offset:
+            X: 0
+            Y: 0
+            Z: 0.11999999731779099
+          Text Scale: 0.15000000596046448
+          Topic: /custom_static_particles_odom_0
+          Unreliable: false
+          Value: true
+        - Class: rviz_odom_trail_plugin/OdomTrail
+          Enabled: true
+          Line Alpha: 0.6000000238418579
+          Line Color: 128; 64; 0
+          Line Width: 0.009999999776482582
+          Max Points: 100
+          Min Distance: 0.0010000000474974513
+          Name: OdomTrail-Robot2-Left
+          Queue Size: 10
+          Show Sphere: true
+          Show Text: true
+          Sphere Alpha: 0.800000011920929
+          Sphere Color: 128; 64; 0
+          Sphere Scale: 0.20000000298023224
+          Text: Robot 2
+          Text Alpha: 1
+          Text Color: 20; 20; 20
+          Text Offset:
+            X: 0
+            Y: 0
+            Z: 0.11999999731779099
+          Text Scale: 0.15000000596046448
+          Topic: /custom_static_particles_odom_15
+          Unreliable: false
+          Value: true
+      Enabled: true
+      Name: Group-OdomTrails-Robots
+    - Class: rviz/Group
+      Displays:
+        - Class: rviz_odom_trail_plugin/OdomTrail
+          Enabled: true
+          Line Alpha: 0.6000000238418579
+          Line Color: 255; 0; 255
+          Line Width: 0.009999999776482582
+          Max Points: 100
+          Min Distance: 0.0010000000474974513
+          Name: OdomTrail-Hand1-Right
+          Queue Size: 10
+          Show Sphere: true
+          Show Text: true
+          Sphere Alpha: 0.800000011920929
+          Sphere Color: 255; 0; 255
+          Sphere Scale: 0.20000000298023224
+          Text: Right Hand
+          Text Alpha: 1
+          Text Color: 20; 20; 20
+          Text Offset:
+            X: 0
+            Y: 0
+            Z: 0.11999999731779099
+          Text Scale: 0.15000000596046448
+          Topic: /odom_hand_1
+          Unreliable: false
+          Value: true
+        - Class: rviz_odom_trail_plugin/OdomTrail
+          Enabled: true
+          Line Alpha: 0.6000000238418579
+          Line Color: 128; 0; 128
+          Line Width: 0.009999999776482582
+          Max Points: 100
+          Min Distance: 0.0010000000474974513
+          Name: OdomTrail-Hand2-Left
+          Queue Size: 10
+          Show Sphere: true
+          Show Text: true
+          Sphere Alpha: 0.800000011920929
+          Sphere Color: 128; 0; 128
+          Sphere Scale: 0.20000000298023224
+          Text: Left Hand
+          Text Alpha: 1
+          Text Color: 20; 20; 20
+          Text Offset:
+            X: 0
+            Y: 0
+            Z: 0.11999999731779099
+          Text Scale: 0.15000000596046448
+          Topic: /odom_hand_2
+          Unreliable: false
+          Value: true
+      Enabled: true
+      Name: Group-OdomTrails-Hands
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -481,7 +589,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 6.321939468383789
+      Distance: 6.036372661590576
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -489,17 +597,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.0389937162399292
-        Y: 1.7452560663223267
-        Z: -0.5924327969551086
+        X: 1.0962430238723755
+        Y: 1.9009685516357422
+        Z: -0.7266910672187805
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7903995513916016
+      Pitch: 0.8253992795944214
       Target Frame: <Fixed Frame>
-      Yaw: 0.9713374376296997
+      Yaw: 0.9213384389877319
     Saved:
       - Class: rviz/Orbit
         Distance: 4.851423263549805

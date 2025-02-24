@@ -51,7 +51,7 @@ FabricSimulator::FabricSimulator(ros::NodeHandle &nh, ros::NodeHandle &nh_local,
     timer_render_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::render, this,false, false); 
     timer_simulate_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::simulate, this,false, false); 
 
-    timer_wrench_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishWrenches, this,false, false); 
+    timer_wrench_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishWrenchesOnExternalOdoms, this,false, false); 
     timer_render_rb_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::renderRigidBodies, this,false, false); 
     timer_min_dist_to_rb_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishMinDistancesToRigidBodies, this,false, false); 
     timer_fabric_state_pub_ = nh_.createTimer(ros::Duration(1.0), &FabricSimulator::publishFabricState, this,false, false); 
@@ -721,12 +721,17 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
                 ros::Subscriber& subscriber = kv.second; // Get the subscriber (which is the value in the key-value pair)
                 subscriber.shutdown();
             }
-
+            
             for (auto& kv : custom_static_particles_cmd_vel_subscribers_) {
                 ros::Subscriber& subscriber = kv.second; // Get the subscriber (which is the value in the key-value pair)
                 subscriber.shutdown();
             }
 
+            for (auto& kv : external_odom_attachments_) {
+                ros::Subscriber& subscriber = kv.second.odom_sub; // Get the subscriber
+                subscriber.shutdown();
+            }
+            
             // Stop publishers
             pub_wrench_stamped_01_.shutdown();
             pub_wrench_stamped_02_.shutdown();
@@ -923,7 +928,7 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
     // Tell simulation (fabric) to fix/unfix the nearest particles within a radius.
     std::vector<int> attached_ids;
     std::vector<Eigen::Matrix<Real,1,3>> attached_rel_poses;
-    fabric_.attachNearestWithRadius(pos, robot_attach_radius_, 
+    fabric_.attachWithinRadius(pos, robot_attach_radius_, 
                                     attached_ids, attached_rel_poses,
                                     is_fix);
 
@@ -948,23 +953,92 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
     return true;
 }
 
-
-void FabricSimulator::attachExternalOdomFrameRequestCb(const fabric_simulator::AttachExternalOdomFrameRequest::ConstPtr& 
-                                                                                    attach_externa_odom_frame_request_msg)
+void FabricSimulator::attachExternalOdomFrameRequestCb(
+    const fabric_simulator::AttachExternalOdomFrameRequest::ConstPtr & msg)
 {
-    // TODO
+    attachExternalOdomFrameCommon(msg->odom_topic, msg->is_attach);
 }
 
 bool FabricSimulator::attachExternalOdomFrameCallback(fabric_simulator::AttachExternalOdomFrame::Request &req, 
                                                         fabric_simulator::AttachExternalOdomFrame::Response &res)
 {
-    // TODO
+    bool success = attachExternalOdomFrameCommon(req.odom_topic, req.is_attach);
+    res.success = success;
     return true;
 }
 
-bool attachExternalOdomFrameCommon()
+bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_topic, bool is_attach)
 {
-    // TODO
+
+    if (is_attach) 
+    {
+        // Check if we already have an entry for this odom_topic
+        auto it = external_odom_attachments_.find(odom_topic);
+        if (it == external_odom_attachments_.end())
+        {
+            // If not in the map, create a new ExternalOdomAttachment
+            ExternalOdomAttachment external_odom_attachment;
+            external_odom_attachment.odom_topic = odom_topic;
+            
+            // (Optionally) decide or read a param for the wrench frame ID or topic
+            // generate a default or parse from the request, if odom msg has a child frame id, this default is updated in the odom callback
+            // otherwise (i.e. if the odom msg has no child frame id/empty str), this default is used.
+            external_odom_attachment.wrench_frame_id = "default_frame_id";
+            std::string wrench_topic_name = odom_topic + "_wrench";
+            
+            // Create the subscriber. We use a bind or lambda to pass the key
+            // back into the callback so that we know which external_odom_attachment is calling back
+            external_odom_attachment.odom_sub = nh_.subscribe<nav_msgs::Odometry>(
+                odom_topic, 10,
+                [this, odom_topic](const nav_msgs::Odometry::ConstPtr& odom_msg) { 
+                    this->odometryCb_external(odom_msg, odom_topic); }
+                );
+            
+            // Create a publisher for the wrench
+            external_odom_attachment.wrench_pub = nh_.advertise<geometry_msgs::WrenchStamped>(wrench_topic_name, 1);
+            
+            // Insert into the map
+            external_odom_attachments_[odom_topic] = external_odom_attachment;
+
+            ROS_INFO_STREAM("Created new external_odom_attachment attachment for topic: " << odom_topic);
+        }
+        else
+        {
+            ROS_INFO_STREAM("External_odom_attachment with topic '" << odom_topic << "' already known.");
+        }
+
+        // Assume not attached until we get the first callback
+        external_odom_attachments_[odom_topic].is_attached = false; // We'll try to attach on first next odom callback
+    } 
+    else 
+    { // Detach
+        auto it = external_odom_attachments_.find(odom_topic);
+        if (it != external_odom_attachments_.end())
+        {
+            // Cleanup if needed
+            ROS_INFO_STREAM("Detaching external_odom_attachment with topic: " << odom_topic);
+            
+            // Make those particles dynamic from the fabric:
+            fabric_.setDynamicParticles(it->second.attached_ids);
+
+            // Do the internal cleanup:
+
+            // We can either just mark it not attached:
+            it->second.is_attached = false;
+            // it->second.attached_ids.clear();
+            // or remove from map entirely:
+            it->second.odom_sub.shutdown();
+            it->second.wrench_pub.shutdown();
+            
+            // Actually remove from map
+            external_odom_attachments_.erase(it);
+        }
+        else
+        {
+            ROS_INFO_STREAM("No external_odom_attachment found for topic '" << odom_topic << "' to detach.");
+        }
+    }
+    
     return true;
 }
 
@@ -1346,18 +1420,8 @@ void FabricSimulator::simulate(const ros::TimerEvent& e){
     }
     // --------------------------------------------------------------
     
-
-
-    // // To debug force readings from hanged corners (use only when robots are not attached)
-    // std::vector<int> *attached_ids_ptr = fabric_.getAttachedIdsPtr();
-    // Eigen::Matrix<Real,Eigen::Dynamic,3> *for_ptr = fabric_.getForPtr();
-    // int id = (*attached_ids_ptr)[0]; // First attached id
-    // // force at that attached id
-    // std::cout << "id: " << id << ". Force = " << for_ptr->row(id)/num_substeps_ << " N." << std::endl;
-
     // +++++++++++++++++++++++++++++++++++++++++++++++++++==
-    // readAttachedRobotForces();
-    // fabric_.resetForces();
+    readAttachedRobotForces();
     // +++++++++++++++++++++++++++++++++++++++++++++++++++==
 
     // std::chrono::high_resolution_clock::time_point finish_time = high_resolution_clock::now();
@@ -1605,6 +1669,74 @@ void FabricSimulator::odometryCb_custom_static_particles(const nav_msgs::Odometr
     fabric_.updateAttachedPose(id, pos);
 }
 
+void FabricSimulator::odometryCb_external(const nav_msgs::Odometry::ConstPtr& odom_msg, const std::string& topic) {
+    // With some kind of self lock to prevent collision with simulation
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+
+    auto it = external_odom_attachments_.find(topic);
+    if (it == external_odom_attachments_.end())
+    {
+        // This shouldn't happen if we remove from map cleanly,
+        // but just in case.
+        ROS_WARN_STREAM("No external_odom_attachment attachment found for key: " << topic);
+        return;
+    }
+
+    ExternalOdomAttachment &external_odom_attachment = it->second;
+
+    // Convert Pose to Eigen position.
+    Eigen::Matrix<Real,1,3> pos(odom_msg->pose.pose.position.x, 
+                                odom_msg->pose.pose.position.y, 
+                                odom_msg->pose.pose.position.z);
+
+    // Convert orientation (if needed).
+    Eigen::Quaternion<Real> ori(odom_msg->pose.pose.orientation.w, 
+                                odom_msg->pose.pose.orientation.x, 
+                                odom_msg->pose.pose.orientation.y, 
+                                odom_msg->pose.pose.orientation.z);
+    ori.normalize();
+
+    
+    if (!external_odom_attachment.is_attached) // Perform the attach logic
+    {
+        // // tell sim objects (fabric) to attach external_odom_attachment to the nearest particle
+        // external_odom_attachment.attached_id = fabric_.attachNearest(pos);
+        // std::cout << "external_odom_attachment.attached_id: " << external_odom_attachment.attached_id << std::endl;
+
+        // if (external_odom_attachment.attached_id != -1)
+        // {
+        //     external_odom_attachment.is_attached = true;
+        // }
+
+        fabric_.attachWithinRadius(pos, robot_attach_radius_,
+                                            external_odom_attachment.attached_ids,
+                                            external_odom_attachment.attached_rel_poses);
+        
+        if (!external_odom_attachment.attached_ids.empty()) { // if success
+            external_odom_attachment.attached_id = external_odom_attachment.attached_ids[0]; 
+            external_odom_attachment.attached_orient = ori;
+
+            // Also update the default wrench frame id with the frame of the odom_msg if child frame id is not empty,
+            // otherwise, keep the default wrench frame id
+            if (!odom_msg->child_frame_id.empty()) {
+                external_odom_attachment.wrench_frame_id = odom_msg->child_frame_id;
+            }
+        }
+
+        external_odom_attachment.is_attached = true;
+    }
+    else
+    {
+        // // tell sim object to update its position
+        // fabric_.updateAttachedPose(external_odom_attachment.attached_id, pos);
+
+        // The update logic if already attached
+        fabric_.updateAttachedPoses(external_odom_attachment.attached_ids, pos,
+                                    external_odom_attachment.attached_rel_poses,
+                                    ori, external_odom_attachment.attached_orient);
+    }
+}
+
 void FabricSimulator::odometryCb_01(const nav_msgs::Odometry::ConstPtr& odom_msg){
     // // With some kind of self lock to prevent collision with simulation
     boost::recursive_mutex::scoped_lock lock(mtx_);
@@ -1802,31 +1934,75 @@ void FabricSimulator::cmdVelCb_custom_static_particles(const geometry_msgs::Twis
 }
 
 void FabricSimulator::readAttachedRobotForces(){
-    Eigen::Matrix<Real,Eigen::Dynamic,3> *for_ptr = fabric_.getForPtr();
+    const Eigen::Matrix<Real,Eigen::Dynamic,3> &for_ptr = *fabric_.getForPtr();
 
-    // std::cout << "Here" << std::endl;
+    for (auto & kv : external_odom_attachments_)
+    {
+        ExternalOdomAttachment &external_odom_attachment = kv.second;
+        if (external_odom_attachment.is_attached && !external_odom_attachment.attached_ids.empty())
+        {
+            // For simplicity, if you attach only one ID, use it directly:
+            // external_odom_attachment.attached_force = for_ptr.row(external_odom_attachment.attached_id);
+            
+            // OR if you have multiple attached IDs, you might average them or sum them
+            // as needed:
+            Eigen::Matrix<Real,1,3> accum = Eigen::Matrix<Real,1,3>::Zero();
+            for (int pid : external_odom_attachment.attached_ids)
+            {
+                // Log the forces on the attached particles with ros_info
+                // ROS_INFO_STREAM("External Odom Attachment: " << kv.first << ". ID: " << pid << ". Force = " << for_ptr.row(pid) << " N.");
+
+                accum += for_ptr.row(pid);
+            }
+
+            external_odom_attachment.attached_force = accum;
+        }
+        else
+        {
+            // ROS_WARN_STREAM("External Odom Attachment: " << kv.first << " is not attached to any particle.");
+            external_odom_attachment.attached_force.setZero();
+        }
+    }
 
     if (is_rob_01_attached_){
-        rob_01_attached_force_ = for_ptr->row(rob_01_attached_id_)/num_substeps_;
-        // std::cout << "id: " << rob_01_attached_id_ << ". Force = " << ": " << for_ptr->row(rob_01_attached_id_)/num_substeps_ << " N." << std::endl;
+        rob_01_attached_force_ = for_ptr.row(rob_01_attached_id_);
     }
     if (is_rob_02_attached_){
-        rob_02_attached_force_ = for_ptr->row(rob_02_attached_id_)/num_substeps_;
+        rob_02_attached_force_ = for_ptr.row(rob_02_attached_id_);
     }
     if (is_rob_03_attached_){
-        rob_03_attached_force_ = for_ptr->row(rob_03_attached_id_)/num_substeps_;
+        rob_03_attached_force_ = for_ptr.row(rob_03_attached_id_);
     }
     if (is_rob_04_attached_){
-        rob_04_attached_force_ = for_ptr->row(rob_04_attached_id_)/num_substeps_;
+        rob_04_attached_force_ = for_ptr.row(rob_04_attached_id_);
     }
 }
 
-// Publish forces on each robot by the fabric
-void FabricSimulator::publishWrenches(const ros::TimerEvent& e){
+// Publish forces on each robot/external_odom_attachment by the fabric
+void FabricSimulator::publishWrenchesOnExternalOdoms(const ros::TimerEvent& e){
     geometry_msgs::WrenchStamped msg;
     msg.header.stamp = ros::Time::now();
 
-    // std::cout << "Here22" << std::endl;
+    for (auto & kv : external_odom_attachments_)
+    {
+        ExternalOdomAttachment &external_odom_attachment = kv.second;
+        // only publish for attached robots
+        if (!external_odom_attachment.is_attached){
+            continue;
+        }  
+
+        msg.header.frame_id = external_odom_attachment.wrench_frame_id;   // user-defined or param
+        msg.wrench.force.x  = external_odom_attachment.attached_force(0);
+        msg.wrench.force.y  = external_odom_attachment.attached_force(1);
+        msg.wrench.force.z  = external_odom_attachment.attached_force(2);
+
+        // Torque // TODO: calculate the torque from the forces and the relative poses, for now, just zero
+        msg.wrench.torque.x = 0.0;
+        msg.wrench.torque.y = 0.0;
+        msg.wrench.torque.z = 0.0;
+
+        external_odom_attachment.wrench_pub.publish(msg);
+    }
 
     if (is_rob_01_attached_){
         // std::cout << "id: " << rob_01_attached_id_ << ". Force = " << rob_01_attached_force_ << " N." << std::endl;
@@ -1878,7 +2054,7 @@ void FabricSimulator::publishWrenches(const ros::TimerEvent& e){
     }    
 }
 
-// Publish forces on each robot by the fabric
+// Publish forces on each robot/external_odom_attachment by the fabric
 void FabricSimulator::publishZeroWrenches(){
     geometry_msgs::WrenchStamped msg;
     msg.header.stamp = ros::Time::now();
@@ -1889,6 +2065,18 @@ void FabricSimulator::publishZeroWrenches(){
     msg.wrench.torque.x = 0.0;
     msg.wrench.torque.y = 0.0;
     msg.wrench.torque.z = 0.0;
+
+    for (auto & kv : external_odom_attachments_)
+    {
+        ExternalOdomAttachment &external_odom_attachment = kv.second;
+
+        if (!external_odom_attachment.is_attached){
+            continue;
+        }
+
+        msg.header.frame_id = external_odom_attachment.wrench_frame_id;
+        external_odom_attachment.wrench_pub.publish(msg);
+    }
 
     if (is_rob_01_attached_){
         // std::cout << "id: " << rob_01_attached_id_ << ". Force = " << rob_01_attached_force_ << " N." << std::endl;

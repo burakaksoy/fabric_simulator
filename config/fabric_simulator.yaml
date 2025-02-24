@@ -143,6 +143,7 @@ visualize_min_distances: true
 min_dist_line_marker_scale_multiplier: 4.0 # multiplies 5 mm with this scale
 min_dist_line_marker_color_rgba: [1.0, 0.0, 0.0, 1.0]
 
+robot_attach_radius: 0.1 #0.35
 
 # Odometry topics that publishes robot positions to the fabric simulator
 odom_01_topic_name: "d1/ground_truth/fabric_mount/odom"
@@ -157,8 +158,6 @@ wrench_03_frame_id: "d3_tf_fabric_mount_link"
 wrench_04_frame_id: "d4_tf_fabric_mount_link"
 
 fabric_rob_z_offset_: 0.0 # z offset between the specified frame and fabric attachement
-
-robot_attach_radius: 0.1 #0.35
 
 # Published topic names of the forces of    robots.
 wrench_01_topic_name: "d1/fabric_wrench_stamped"

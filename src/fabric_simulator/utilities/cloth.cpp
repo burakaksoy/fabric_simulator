@@ -214,24 +214,26 @@ Eigen::RowVectorXi Cloth::findTriNeighbors(const Eigen::MatrixX3i &face_tri_ids)
 
 // Find the nearest 3D position vector row id in the given matrix
 int Cloth::findNearestPositionVectorId(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic>& matrix, 
-                                       const Eigen::Matrix<Real,3,1>& pos) {
-  int nearestId = -1;
-  Real minDistance = std::numeric_limits<Real>::max();
-  for (int i = 0; i < matrix.rows(); ++i) {
-    Eigen::Matrix<Real,3,1> currentPos = matrix.row(i);
-    Real currentDistance = (currentPos - pos).norm();
-    if (currentDistance < minDistance) {
-      nearestId = i;
-      minDistance = currentDistance;
+                                        const Eigen::Matrix<Real,3,1>& pos) 
+{
+    int nearestId = -1;
+    Real minDistance = std::numeric_limits<Real>::max();
+    for (int i = 0; i < matrix.rows(); ++i) 
+    {
+        Eigen::Matrix<Real,3,1> currentPos = matrix.row(i);
+        Real currentDistance = (currentPos - pos).norm();
+        if (currentDistance < minDistance) {
+            nearestId = i;
+            minDistance = currentDistance;
+        }
     }
-  }
-  return nearestId;
+    return nearestId;
 }
 
 void Cloth::findPositionVectorsAndIdsInSphere(const Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic> &particlePoses, 
-                                       const Real &radius, 
-                                       std::vector<int> &ids, 
-                                       std::vector<Eigen::Matrix<Real,1,3>> &rel_poses) {
+                                                const Real &radius, 
+                                                std::vector<int> &ids, 
+                                                std::vector<Eigen::Matrix<Real,1,3>> &rel_poses) {
     const int first_id = ids[0];
     const Eigen::Matrix<Real,3,1> center = particlePoses.row(first_id);
 
@@ -595,11 +597,6 @@ void Cloth::resetLambdas(){
     Lambda_bending_.assign(bending_ids_.rows(),0.0); 
 }
 
-void Cloth::normalizeForces(const int &num_substeps){
-    // Find the average forces of the timestep during the substep iterations
-    for_ /= num_substeps;
-}
-
 int Cloth::attachNearest(const Eigen::Matrix<Real,1,3> &pos){
     int id = findNearestPositionVectorId(pos_,pos);
     // Make that particle stationary
@@ -643,6 +640,40 @@ void Cloth::attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Re
             // Make those particles dynamic
             setDynamicParticles(ids);
         }
+    }
+}
+
+void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+                                    std::vector<int> &ids,
+                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                    bool is_attach){
+    // Attaches the particles that is inside a sphere defined with radius r parallel with center pos
+    // Edits:
+    // std::vector<int> ids;
+    // std::vector<Eigen::Matrix<Real,1,3>> rel_poses; 
+
+    // if (r <= 0), Only attach the nearest to given pose
+    if (r > 0){ // Attach all within the specified circle
+        // Find all the ids within the radius around the given pos and their relative poses
+        // findPositionVectorsAndIdsInSphere(pos_, r, ids, rel_poses);
+        for (int i = 0; i < pos_.rows(); i++) {
+            Eigen::Matrix<Real,1,3> currentPos = pos_.row(i).transpose();
+            Eigen::Matrix<Real,1,3> relPos = (currentPos - pos); 
+            Real currentDistance = relPos.norm();
+            if (currentDistance < r) {
+                ids.push_back(i);
+                rel_poses.push_back(relPos);
+            }
+        }
+    }
+
+    if (is_attach){
+        // Make those particles stationary
+        setStaticParticles(ids);
+    }
+    else{
+        // Make those particles dynamic
+        setDynamicParticles(ids);
     }
 }
 
