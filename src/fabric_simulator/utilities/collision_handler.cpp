@@ -530,6 +530,12 @@ void CollisionHandler::computeMinDistanceRBSolid(pbd_object::Cloth &fabric_,
 
         for (auto i = node.begin; i < node.begin + node.n; ++i) {
             unsigned int index = bvh.entity(i);
+
+			// Skip non-dynamic particles
+			if (!fabric_.isDynamicParticle(index)) {
+				continue;
+			}
+
             const Eigen::Matrix<Real, 3, 1>& x_w = pos_ptr->row(index).transpose(); // point on cloth
             const Eigen::Matrix<Real, 3, 1> x = R.transpose() * (x_w - com2); // represented on rb
 
