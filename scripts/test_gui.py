@@ -62,6 +62,8 @@ class TestGUI(qt_widgets.QWidget):
         self.mode = "simulation_test"  # Default mode. Use this mode for default fabric simulation test
         # self.mode = "composite_sheet_application_test"  # Use this mode for testing the composite sheet application
         
+        self.mode = rospy.get_param("~mode", self.mode)
+        
         if self.mode == "simulation_test":
             simulator_node_name = "/fabric_simulator_node"
         elif self.mode == "composite_sheet_application_test":
