@@ -59,11 +59,12 @@ class TestGUI(qt_widgets.QWidget):
         self.cmd_vel_topic_prefix = None
         self.binded_particles_odom_topic_prefix = None
         
-        self.mode = "simulation_test"  # Default mode. Use this mode for default fabric simulation test
-        # self.mode = "composite_sheet_application_test"  # Use this mode for testing the composite sheet application
+        mode = "simulation_test"  # Default mode. Use this mode for default fabric simulation test
+        # mode = "composite_sheet_application_test"  # Use this mode for testing the composite sheet application
         
-        self.mode = rospy.get_param("~mode", self.mode)
+        self.mode = rospy.get_param("~mode", mode)
         
+        simulator_node_name = "" # Default value
         if self.mode == "simulation_test":
             simulator_node_name = "/fabric_simulator_node"
         elif self.mode == "composite_sheet_application_test":
