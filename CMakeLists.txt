@@ -137,6 +137,8 @@ set(MSG_FILES
     SegmentStateArray.msg
     AttachExternalOdomFrameRequest.msg
     FixNearestFabricParticleRequest.msg
+    SyncParticleUpdateData.msg
+    SyncParticleUpdateDataArray.msg
 )
 
 ## Generate messages in the 'msg' folder

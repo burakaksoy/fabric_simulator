@@ -84,7 +84,7 @@ public:
     void solve(const Real &dt);
     void postSolve(const Real &dt);
 
-    void changeParticleDynamicity(const int &particle, const bool &is_dynamic);
+    void changeParticleDynamicity(const int &particle, const bool &is_dynamic, const Eigen::Matrix<Real,1,3>* pos = nullptr);
 
     void hangFromCorners(const int &num_corners, std::vector<int>& custom_static_particles_);
     void setStaticParticles(const std::vector<int> &particles);

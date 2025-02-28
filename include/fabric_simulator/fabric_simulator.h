@@ -23,6 +23,7 @@
 #include <fabric_simulator/SegmentStateArray.h> 
 #include <fabric_simulator/FixNearestFabricParticleRequest.h> 
 #include <fabric_simulator/AttachExternalOdomFrameRequest.h> 
+#include <fabric_simulator/SyncParticleUpdateDataArray.h>
 
 #include <std_srvs/Empty.h>
 #include <fabric_simulator/SetParticleDynamicity.h> // service
@@ -83,7 +84,7 @@ struct ExternalOdomAttachment
     std::vector<Eigen::Matrix<Real,1,3>> attached_rel_poses;
     Eigen::Matrix<Real,1,3> attached_force{0,0,0};
     // TODO: Add torque as well
-    Eigen::Quaterniond attached_orient{1,0,0,0}; // last known orientation, for example
+    Eigen::Quaternion<Real> attached_orient{1,0,0,0}; // last known orientation, for example
 };
 
 class FabricSimulator
@@ -181,13 +182,20 @@ private:
 
     // Change Dynamicity callback function
     void changeParticleDynamicityCb(const fabric_simulator::ChangeParticleDynamicity::ConstPtr& change_particle_dynamicity_msg);
-    bool updateParticleDynamicityCommon(int particle_id, bool is_dynamic);
+    bool updateParticleDynamicityCommon(int particle_id, bool is_dynamic, const Eigen::Matrix<Real,1,3>* pos = nullptr,
+                                        std::string odom_topic = "", std::string cmd_vel_topic = "");
+
+    void updateCustomStaticParticles_(const int& particle_id, const bool& is_dynamic);
+    void updateCustomStaticParticlesOdomAndCmdVelSubscibers_(const int& particle_id, const bool& is_dynamic,
+                                                            std::string& odom_topic, std::string& cmd_vel_topic);
 
     void fixNearestFabricParticleRequestCb(const fabric_simulator::FixNearestFabricParticleRequest::ConstPtr& fix_nearest_fabric_particle_request_msg);
     bool fixNearestFabricParticleCommon(bool is_fix, const geometry_msgs::PoseStamped &pose);
 
     void attachExternalOdomFrameRequestCb(const fabric_simulator::AttachExternalOdomFrameRequest::ConstPtr& attach_externa_odom_frame_request_msg);
     bool attachExternalOdomFrameCommon(const std::string & odom_topic, bool is_attach);
+
+    void syncParticleUpdateDataArrayCb(const fabric_simulator::SyncParticleUpdateDataArray::ConstPtr& sync_particle_update_data_array_msg);
 
     // Change Stretching Compliance and Bending Compliance callback functions
     void changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr& stretching_compliance_msg);
@@ -258,6 +266,9 @@ private:
 
     ros::Subscriber sub_attach_external_odom_frame_request_;
     ros::ServiceServer attach_external_odom_frame_srv_;
+    
+    ros::Subscriber sub_sync_particle_updates_;
+    ros::Publisher pub_sync_particle_updates_;
 
     ros::Subscriber sub_change_stretching_compliance_;
     ros::Subscriber sub_change_bending_compliance_;
@@ -297,6 +308,8 @@ private:
 
     bool is_collision_handling_enabled_;
     bool visualize_min_distances_;
+
+    bool is_dependant_simulator_; // if true, the simulator subscribes to a topic to get the particle dynamicity change updates to synchronize with the main simulator, otherwise the simulator publishes the particle dynamicity change updates to a topic for other simulators to synchronize. The changes are transferred via a custom synchronization topic.
 
     Real contact_tolerance_;
     Real contact_sdf_domain_offset_;
@@ -372,6 +385,8 @@ private:
 
     std::string attach_external_odom_frame_topic_name_;
     std::string attach_external_odom_frame_service_name_;
+    
+    std::string sync_particle_updates_topic_name_;
 
     std::string set_fabric_stretching_compliance_service_name_;
     std::string set_fabric_bending_compliance_service_name_;

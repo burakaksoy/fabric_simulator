@@ -101,7 +101,7 @@ rendering_rb_rate: 2 # Hz, frequency to publish the rigid body meshes to RVIZ vi
 min_dist_to_rb_pub_rate: 50.0 # Hz, frequency to publish minimum distances to the rigid bodies 
 
 # Rigid body scene .json file, If empty, no rigid bodies exist in the simulator
-rb_scene_config_path: ""
+# rb_scene_config_path: ""
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrel.json 
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCylinderUnitBox.json
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnCylinderVaseUnitBox.json
@@ -112,6 +112,10 @@ rb_scene_config_path: ""
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnRollers.json
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnBunny.json
 rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrelReal.json 
+
+is_dependant_simulator: false # (default: false) if true, the simulator subscribes to a topic to get the particle dynamicity change updates to synchronize with the main simulator, otherwise the simulator publishes the particle dynamicity change updates to a topic for other simulators to synchronize. The changes are transferred via a custom synchronization topic.
+
+sync_particle_updates_topic_name: "sync_particle_updates" # topic name to publish the particle dynamicity change updates to synchronize with other simulators. Either publish or subscribe to this topic based on is_dependant_simulator flag.
 
 # FABRIC VISUALIZATION RELATED PARAMETERS
 fabric_frame_id: "map" # the reference tf frame ID that the visualization marker msgs are published in.

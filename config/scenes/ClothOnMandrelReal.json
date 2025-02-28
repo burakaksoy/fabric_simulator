@@ -27,7 +27,7 @@
 			"geometryFile": "/home/burak/catkin_ws_deformable/src/fabric_simulator/data/mesh/mandrel.obj",
 			"isDynamic": 0, 
 			"density": 500, 
-			"translation": [1.9,2.2,0.6],
+			"translation": [1.9,2.2,0.66],
 			"rotationAxis": [0.577350269, 0.577350269, 0.577350269],
 			"rotationAngle": 2.094395102,
 			"scale": [0.0254, 0.0254, 0.0254],

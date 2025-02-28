@@ -167,6 +167,8 @@ FabricSimulator::~FabricSimulator() {
     nh_local_.deleteParam("attach_external_odom_frame_topic_name");
     nh_local_.deleteParam("attach_external_odom_frame_service_name");
 
+    nh_local_.deleteParam("sync_particle_updates_topic_name");
+
     nh_local_.deleteParam("rb_line_marker_scale_multiplier");
 
     nh_local_.deleteParam("rb_line_marker_color_rgba");
@@ -203,6 +205,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
     nh_local_.param<bool>("is_collision_handling_enabled", is_collision_handling_enabled_, true);
     nh_local_.param<bool>("visualize_min_distances", visualize_min_distances_, true);
+    nh_local_.param<bool>("is_dependant_simulator", is_dependant_simulator_, false);
 
     nh_local_.param<int>("fabric_visualization_mode", fabric_visualization_mode_, 4); // 0: Points Only, 1: Wireframe Only, 2: Mesh Only, 3: Points and Wireframe, 4: All
     nh_local_.param<int>("rb_visualization_mode", rb_visualization_mode_, 2); // 0: Mesh Only, 1: Wireframe Only, 2: Both
@@ -294,6 +297,8 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
     
     nh_local_.param<std::string>("attach_external_odom_frame_topic_name", attach_external_odom_frame_topic_name_, std::string("attach_external_odom_frame_request"));
     nh_local_.param<std::string>("attach_external_odom_frame_service_name", attach_external_odom_frame_service_name_, std::string("attach_external_odom_frame"));
+
+    nh_local_.param<std::string>("sync_particle_updates_topic_name", sync_particle_updates_topic_name_, std::string("sync_particle_updates"));
 
     nh_local_.param<std::string>("set_fabric_stretching_compliance_service_name", set_fabric_stretching_compliance_service_name_, std::string("set_fabric_stretching_compliance"));
     nh_local_.param<std::string>("set_fabric_bending_compliance_service_name", set_fabric_bending_compliance_service_name_, std::string("set_fabric_bending_compliance"));
@@ -656,6 +661,17 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
                                                             &FabricSimulator::changeBendingComplianceCb,
                                                             this);  
 
+            if (is_dependant_simulator_) {
+                // Create a subscriber for the sync particle updates topic
+                sub_sync_particle_updates_ = nh_.subscribe(sync_particle_updates_topic_name_, 
+                                                            1, 
+                                                            &FabricSimulator::syncParticleUpdateDataArrayCb, 
+                                                            this);
+            } else {
+                // Create a publisher for the sync particle updates topic
+                pub_sync_particle_updates_ = nh_.advertise<fabric_simulator::SyncParticleUpdateDataArray>(sync_particle_updates_topic_name_, 1);
+            }
+
             // Create publishers
             pub_face_tri_ids_ = nh_.advertise<std_msgs::Int32MultiArray>(face_tri_ids_topic_name_, 1);
 
@@ -724,6 +740,12 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
 
             sub_change_stretching_compliance_.shutdown();
             sub_change_bending_compliance_.shutdown();
+
+            if (is_dependant_simulator_) {
+                sub_sync_particle_updates_.shutdown();
+            } else {
+                pub_sync_particle_updates_.shutdown();
+            }
 
             // Iterate through the map and shut down each subscriber
             for (auto& kv : custom_static_particles_odom_subscribers_) {
@@ -823,16 +845,70 @@ void FabricSimulator::changeParticleDynamicityCb(
 }
 
 // Helper function that contains the common logic.
-bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dynamic) {
+bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dynamic,
+                                                    const Eigen::Matrix<Real,1,3>* pos,
+                                                    std::string odom_topic, std::string cmd_vel_topic) 
+{
+    // Lock to prevent collisions with the simulation.
+    boost::recursive_mutex::scoped_lock lock(mtx_);    
+
+    // Create a sync particle update message (if not in dependant simulator mode we will publish it)
+    fabric_simulator::SyncParticleUpdateDataArray sync_particle_update_msg;
+    fabric_simulator::SyncParticleUpdateData particle_update_data;
+    
+    particle_update_data.type = fabric_simulator::SyncParticleUpdateData::CHANGE_PARTICLE_DYNAMICITY;
+    particle_update_data.is_dynamic = is_dynamic;
+    particle_update_data.fabric_id = 0; // If there is a single fabric, this is always 0
+    particle_update_data.particle_id = particle_id;
+
     // Attempt to change dynamicity
     try {
-        fabric_.changeParticleDynamicity(particle_id, is_dynamic);
+        fabric_.changeParticleDynamicity(particle_id, is_dynamic, pos);
     } catch (const std::out_of_range& e) {
         ROS_ERROR("Error in updateParticleDynamicityCommon: %s", e.what());
         return false;
     }
 
+    // if the particle is not dynamic, find out its current position and add it to the sync message
+    // This is only necessary if the particle is not dynamic, as dynamic particles are updated in the simulation loop.
+    if (!is_dynamic) {
+        const Eigen::Matrix<Real, 1, 3>& pos = fabric_.getPosPtr()->row(particle_id);
+        particle_update_data.position.x = pos(0);
+        particle_update_data.position.y = pos(1);
+        particle_update_data.position.z = pos(2);
+    } else { // Assign default values to position
+        particle_update_data.position.x = 0.0;
+        particle_update_data.position.y = 0.0;
+        particle_update_data.position.z = 0.0;
+    }
+
     // Update custom_static_particles_ accordingly
+    updateCustomStaticParticles_(particle_id, is_dynamic);
+
+    // Manage odom and cmd_vel subscribers
+    updateCustomStaticParticlesOdomAndCmdVelSubscibers_(particle_id, is_dynamic, odom_topic, cmd_vel_topic);
+
+    // Add the fully resolved topic names to the sync message
+    particle_update_data.odom_topic = odom_topic;
+    particle_update_data.cmd_vel_topic = cmd_vel_topic;
+
+    // If not a dependant simulator, publish the sync message
+    if (!is_dependant_simulator_) {
+        sync_particle_update_msg.header.stamp = ros::Time::now();
+        sync_particle_update_msg.header.frame_id = fabric_frame_id_;
+
+        sync_particle_update_msg.data.push_back(particle_update_data);
+
+        pub_sync_particle_updates_.publish(sync_particle_update_msg);
+        ROS_INFO("Published SyncParticleUpdateDataArray message");
+    }
+
+    // If everything went smoothly, return success
+    return true;
+}
+
+void FabricSimulator::updateCustomStaticParticles_(const int& particle_id, const bool& is_dynamic)
+{
     if (is_dynamic) {
         auto it = std::find(custom_static_particles_.begin(), custom_static_particles_.end(), particle_id);
         if (it != custom_static_particles_.end()) {
@@ -849,8 +925,11 @@ bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dy
             ROS_INFO("Particle %d already in custom_static_particles_", particle_id);
         }
     }
+}
 
-    // Manage odom and cmd_vel subscribers
+void FabricSimulator::updateCustomStaticParticlesOdomAndCmdVelSubscibers_(const int& particle_id, const bool& is_dynamic,
+    std::string& odom_topic, std::string& cmd_vel_topic)
+{
     auto sub_iter = custom_static_particles_odom_subscribers_.find(particle_id);
     auto sub_iter_cmd_vel = custom_static_particles_cmd_vel_subscribers_.find(particle_id);
 
@@ -870,34 +949,53 @@ bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dy
             ROS_INFO("No cmd_vel subscriber found for particle %d", particle_id);
         }
     } else {
+        // Create Odom subscriber if it doesn't exist
         if (sub_iter == custom_static_particles_odom_subscribers_.end()) {
-            std::string topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);
+            std::string topic;
+            if (odom_topic.empty()) {
+                topic = custom_static_particles_odom_topic_prefix_ + std::to_string(particle_id);}
+            else{
+                topic = odom_topic;}
             ros::Subscriber sub = nh_.subscribe<nav_msgs::Odometry>(topic, 1,
                                                                     [this, particle_id](const nav_msgs::Odometry::ConstPtr& odom_msg) {
                                                                         this->odometryCb_custom_static_particles(odom_msg, particle_id);
                                                                     });
             custom_static_particles_odom_subscribers_[particle_id] = sub;
             ROS_INFO("Odom Subscriber for particle %d created", particle_id);
+
+            if (odom_topic.empty())
+            {
+                // Update odom_topic with the fully resolved topic name
+                odom_topic = custom_static_particles_odom_subscribers_[particle_id].getTopic();
+            }
         } else {
             ROS_INFO("Odom Subscriber for particle %d already exists", particle_id);
         }
+
+        // Create CmdVel subscriber if it doesn't exist
         if (sub_iter_cmd_vel == custom_static_particles_cmd_vel_subscribers_.end()) {
-            std::string topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);
+            std::string topic;
+            if (cmd_vel_topic.empty()) {
+                topic = custom_static_particles_cmd_vel_topic_prefix_ + std::to_string(particle_id);}
+            else{
+                topic = cmd_vel_topic;}
             ros::Subscriber sub = nh_.subscribe<geometry_msgs::Twist>(topic, 10,
                 [this, particle_id](const geometry_msgs::Twist::ConstPtr& twist_msg) {
                     this->cmdVelCb_custom_static_particles(twist_msg, particle_id);
                 });
             custom_static_particles_cmd_vel_subscribers_[particle_id] = sub;
             ROS_INFO("Vel Subscriber for particle %d created", particle_id);
+
+            if (cmd_vel_topic.empty())
+            {
+                // Update cmd_vel_topic with the fully resolved topic name
+                cmd_vel_topic = custom_static_particles_cmd_vel_subscribers_[particle_id].getTopic();
+            }
         } else {
             ROS_INFO("Vel Subscriber for particle %d already exists", particle_id);
         }
     }
-
-    // If everything went smoothly, return success
-    return true;
 }
-
 
 // Request callback simply forwards the values to the common function.
 void FabricSimulator::fixNearestFabricParticleRequestCb(const fabric_simulator::FixNearestFabricParticleRequest::ConstPtr& 
@@ -951,7 +1049,7 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
                 is_fix,
                 pos(0), pos(1), pos(2),
                 (int)affected_ids.size());
-    // for (int i = 0; i < attached_ids.size(); ++i) {
+    // for (int i = 0; i < affected_ids.size(); ++i) {
     //     ROS_INFO("FabricSimulator::fixNearestFabricParticleCommon: "
     //                 "Attached particle id %d with rel pose %f %f %f", 
     //                 affected_ids[i],
@@ -959,6 +1057,33 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
     //                 affected_rel_poses[i](1),
     //                 affected_rel_poses[i](2));
     // }
+
+    // Create a sync particle update message (if not in dependant simulator mode we will publish it)
+    if (!is_dependant_simulator_) {
+        fabric_simulator::SyncParticleUpdateDataArray sync_particle_update_msg;
+    
+        for (size_t i = 0; i < affected_ids.size(); ++i) {
+            // Create a new SyncParticleUpdateData
+            fabric_simulator::SyncParticleUpdateData particle_update_data;
+            
+            particle_update_data.type = fabric_simulator::SyncParticleUpdateData::SIMPLE_UPDATE;
+            particle_update_data.is_dynamic = !is_fix;
+            particle_update_data.fabric_id = 0; // If there is a single fabric, this is always 0
+            particle_update_data.particle_id = affected_ids[i];
+            particle_update_data.position.x = pos(0) + affected_rel_poses[i](0);
+            particle_update_data.position.y = pos(1) + affected_rel_poses[i](1);
+            particle_update_data.position.z = pos(2) + affected_rel_poses[i](2);
+    
+            // Add to the sync message
+            sync_particle_update_msg.data.push_back(particle_update_data);
+        }
+
+        // Publish the sync message
+        sync_particle_update_msg.header.stamp = ros::Time::now();
+        sync_particle_update_msg.header.frame_id = fabric_frame_id_;
+        pub_sync_particle_updates_.publish(sync_particle_update_msg);
+        ROS_INFO("Published SyncParticleUpdateDataArray message for fixNearestFabricParticle");
+    }
                                     
     return true;
 }
@@ -979,6 +1104,8 @@ bool FabricSimulator::attachExternalOdomFrameCallback(fabric_simulator::AttachEx
 
 bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_topic, bool is_attach)
 {
+    // Lock to prevent collisions with the simulation.
+    boost::recursive_mutex::scoped_lock lock(mtx_);
 
     if (is_attach) 
     {
@@ -1031,15 +1158,41 @@ bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_top
             // Make those particles dynamic from the fabric:
             fabric_.setDynamicParticles(it->second.attached_ids);
 
-            // Do the internal cleanup:
+            // Create a sync particle update message (if not in dependant simulator mode we will publish it)
+            if (!is_dependant_simulator_) {
+                fabric_simulator::SyncParticleUpdateDataArray sync_particle_update_msg;
 
-            // We can either just mark it not attached:
+                for (size_t i = 0; i < it->second.attached_ids.size(); ++i) {
+                    // Create a new SyncParticleUpdateData
+                    fabric_simulator::SyncParticleUpdateData particle_update_data;
+                    
+                    particle_update_data.type = fabric_simulator::SyncParticleUpdateData::ATTACH_EXTERNAL_ODOM_FRAME;
+                    particle_update_data.is_dynamic = true;
+                    particle_update_data.fabric_id = 0; // If there is a single fabric, this is always 0
+                    particle_update_data.particle_id = it->second.attached_ids[i];
+                    particle_update_data.position.x = 0.0;
+                    particle_update_data.position.y = 0.0;
+                    particle_update_data.position.z = 0.0;
+                    particle_update_data.odom_topic = odom_topic;
+
+
+                    // Add to the sync message
+                    sync_particle_update_msg.data.push_back(particle_update_data);
+                }
+                // Publish the sync message
+                sync_particle_update_msg.header.stamp = ros::Time::now();
+                sync_particle_update_msg.header.frame_id = fabric_frame_id_;
+                pub_sync_particle_updates_.publish(sync_particle_update_msg);
+                ROS_INFO("Published SyncParticleUpdateDataArray message for detachExternalOdomFrame");
+            }
+
+            // Do the internal cleanup:
+            // Mark it not attached:
             it->second.is_attached = false;
             // it->second.attached_ids.clear();
-            // or remove from map entirely:
+            // and remove from map entirely:
             it->second.odom_sub.shutdown();
             it->second.wrench_pub.shutdown();
-            
             // Actually remove from map
             external_odom_attachments_.erase(it);
         }
@@ -1052,6 +1205,152 @@ bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_top
     return true;
 }
 
+void FabricSimulator::syncParticleUpdateDataArrayCb(const fabric_simulator::SyncParticleUpdateDataArray::ConstPtr& msg)
+{
+    // Lock to prevent collisions with the simulation.
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+
+    // Store a list of newly created odom topics that need subscription (needed for ATTACH_EXTERNAL_ODOM_FRAME case)
+    std::vector<std::string> newly_created_odom_topics;
+
+    // Iterate through the array of SyncParticleUpdateData
+    for (const auto& data : msg->data) {
+        // Switch based on the type
+        switch (data.type) {
+            case fabric_simulator::SyncParticleUpdateData::CHANGE_PARTICLE_DYNAMICITY:
+            {
+                Eigen::Matrix<Real,1,3> position(data.position.x, data.position.y, data.position.z);
+                updateParticleDynamicityCommon(data.particle_id, data.is_dynamic, &position,
+                                                data.odom_topic, data.cmd_vel_topic);
+                break;
+            }
+            case fabric_simulator::SyncParticleUpdateData::SIMPLE_UPDATE:
+            {
+                if (!data.is_dynamic) { // Attach to the fabric
+                    Eigen::Matrix<Real,1,3> position(data.position.x, data.position.y, data.position.z);
+                    if (sticked_ids_.find(data.particle_id) == sticked_ids_.end()) {
+                        sticked_ids_.insert(data.particle_id);
+                        fabric_.changeParticleDynamicity(data.particle_id, false, &position);
+                    }
+                } else { // Detach from the fabric
+                    if (sticked_ids_.find(data.particle_id) != sticked_ids_.end()) {
+                        sticked_ids_.erase(data.particle_id);
+                        fabric_.changeParticleDynamicity(data.particle_id, true);
+                    }
+                }
+                break;
+            }
+            case fabric_simulator::SyncParticleUpdateData::ATTACH_EXTERNAL_ODOM_FRAME:
+            {
+                if (!data.is_dynamic) { // Attach to the fabric
+                    // Check if we already have an entry for this odom_topic
+                    auto it = external_odom_attachments_.find(data.odom_topic);
+                    if (it == external_odom_attachments_.end())
+                    {
+                        // If not in the map, create a new ExternalOdomAttachment
+                        ExternalOdomAttachment external_odom_attachment;
+                        external_odom_attachment.odom_topic = data.odom_topic;
+
+                        external_odom_attachment.wrench_frame_id = data.wrench_frame_id;
+                        
+                        external_odom_attachment.is_attached = true;
+                        external_odom_attachment.attached_orient = Eigen::Quaternion<Real>(data.attached_orientation.w, 
+                                                                                            data.attached_orientation.x, 
+                                                                                            data.attached_orientation.y, 
+                                                                                            data.attached_orientation.z);
+
+                        external_odom_attachment.attached_id = data.particle_id;
+                        // external_odom_attachment.attached_ids.clear();
+
+                        // Insert into the map
+                        external_odom_attachments_[data.odom_topic] = external_odom_attachment;
+
+                        // Mark that we have a new odom topic to which we must subscribe
+                        newly_created_odom_topics.push_back(data.odom_topic);
+
+                        ROS_INFO_STREAM("Created new external_odom_attachment attachment for topic: " << data.odom_topic);                        
+                    }
+
+                    //  Since we are sure now that the external_odom_attachment is in the map, we can attach the particles
+                    // Find it in the map
+                    it = external_odom_attachments_.find(data.odom_topic);
+                    ExternalOdomAttachment &external_odom_attachment = it->second;
+
+                    external_odom_attachment.attached_ids.push_back(data.particle_id);
+                    
+                    Eigen::Matrix<Real,1,3> attached_rel_pos(data.attached_rel_pos.x, 
+                                                            data.attached_rel_pos.y, 
+                                                            data.attached_rel_pos.z);
+                    external_odom_attachment.attached_rel_poses.push_back(attached_rel_pos);
+
+                    Eigen::Matrix<Real,1,3> position(data.position.x, data.position.y, data.position.z);
+                    fabric_.changeParticleDynamicity(data.particle_id, false, &position);
+                } else { // Detach from the fabric
+                    // Check if we already have an entry for this odom_topic
+                    auto it = external_odom_attachments_.find(data.odom_topic);
+                    if (it != external_odom_attachments_.end())
+                    {
+                        // If in the map, remove the particle from the attached list
+                        ExternalOdomAttachment &external_odom_attachment = it->second;
+                        
+                        // Make its particles dynamic
+                        fabric_.setDynamicParticles(external_odom_attachment.attached_ids);
+                        
+                        // Do the internal cleanup:
+                        // Mark it not attached:
+                        external_odom_attachment.is_attached = false;
+                        // external_odom_attachment.attached_ids.clear();
+                        // and remove from map entirely:
+                        external_odom_attachment.odom_sub.shutdown();
+                        external_odom_attachment.wrench_pub.shutdown();
+                        // Actually remove from map
+                        external_odom_attachments_.erase(it);
+                        ROS_INFO_STREAM("Detached external_odom_attachment with topic: " << data.odom_topic);
+                    }
+                }
+                break;
+            }
+            
+            default:
+            {
+                ROS_WARN("Unknown SyncParticleUpdateData type received.");
+                break;
+            }
+        }
+    }   
+
+    // Now that we’ve processed the entire array, we actually set up subscribers (and publishers)
+    // for any *new* external odom attachments we created above:
+    for (const auto &odom_topic : newly_created_odom_topics)
+    {
+        auto it = external_odom_attachments_.find(odom_topic);
+        if (it == external_odom_attachments_.end()) {
+            // This theoretically shouldn't happen unless the map was modified again.
+            continue;
+        }
+
+        ExternalOdomAttachment &external_odom_attachment = it->second;
+
+        // Since we haven't subscribed yet, do so now
+        if (!external_odom_attachment.odom_sub)
+        {
+            // Capture just the topic string (not the entire 'data' struct which is now out of scope)
+            external_odom_attachment.odom_sub = nh_.subscribe<nav_msgs::Odometry>(
+                odom_topic, 
+                10,
+                // Use a lambda that knows which topic it is subscribing to
+                [this, odom_topic](const nav_msgs::Odometry::ConstPtr &odom_msg)
+                {
+                    this->odometryCb_external(odom_msg, odom_topic);
+                }
+            );
+
+            // Also create the wrench publisher
+            std::string wrench_topic_name = odom_topic + "_wrench";
+            external_odom_attachment.wrench_pub = nh_.advertise<geometry_msgs::WrenchStamped>(wrench_topic_name, 1);
+        }
+    }
+}
 
 void FabricSimulator::changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr& msg){
     Real stretching_compliance = msg->data;
@@ -1733,6 +2032,43 @@ void FabricSimulator::odometryCb_external(const nav_msgs::Odometry::ConstPtr& od
             if (!odom_msg->child_frame_id.empty()) {
                 external_odom_attachment.wrench_frame_id = odom_msg->child_frame_id;
             }
+
+            // Create a sync particle update message (if not in dependant simulator mode we will publish it)
+            if (!is_dependant_simulator_) {
+                fabric_simulator::SyncParticleUpdateDataArray sync_particle_update_msg;
+                
+                for (size_t i = 0; i < external_odom_attachment.attached_ids.size(); ++i) {
+                    // Create a new SyncParticleUpdateData
+                    fabric_simulator::SyncParticleUpdateData particle_update_data;
+                    
+                    particle_update_data.type = fabric_simulator::SyncParticleUpdateData::ATTACH_EXTERNAL_ODOM_FRAME;
+                    particle_update_data.is_dynamic = false;
+                    particle_update_data.fabric_id = 0; // If there is a single fabric, this is always 0
+                    particle_update_data.particle_id = external_odom_attachment.attached_ids[i];
+                    particle_update_data.position.x = pos(0) + external_odom_attachment.attached_rel_poses[i](0);
+                    particle_update_data.position.y = pos(1) + external_odom_attachment.attached_rel_poses[i](1);
+                    particle_update_data.position.z = pos(2) + external_odom_attachment.attached_rel_poses[i](2);
+                    particle_update_data.odom_topic = topic;
+                    particle_update_data.wrench_frame_id = external_odom_attachment.wrench_frame_id;
+                    particle_update_data.attached_rel_pos.x = external_odom_attachment.attached_rel_poses[i](0);
+                    particle_update_data.attached_rel_pos.y = external_odom_attachment.attached_rel_poses[i](1);
+                    particle_update_data.attached_rel_pos.z = external_odom_attachment.attached_rel_poses[i](2);
+                    particle_update_data.attached_orientation.w = external_odom_attachment.attached_orient.w();
+                    particle_update_data.attached_orientation.x = external_odom_attachment.attached_orient.x();
+                    particle_update_data.attached_orientation.y = external_odom_attachment.attached_orient.y();
+                    particle_update_data.attached_orientation.z = external_odom_attachment.attached_orient.z();
+
+            
+                    // Add to the sync message
+                    sync_particle_update_msg.data.push_back(particle_update_data);
+                }
+                
+                // Publish the sync message
+                sync_particle_update_msg.header.stamp = ros::Time::now();
+                sync_particle_update_msg.header.frame_id = fabric_frame_id_;
+                pub_sync_particle_updates_.publish(sync_particle_update_msg);
+                ROS_INFO("Published sync particle update message for external odometry attachment.");
+            }
         }
 
         external_odom_attachment.is_attached = true;
@@ -1992,6 +2328,9 @@ void FabricSimulator::readAttachedRobotForces(){
 
 // Publish forces on each robot/external_odom_attachment by the fabric
 void FabricSimulator::publishWrenchesOnExternalOdoms(const ros::TimerEvent& e){
+    // With some kind of self lock to prevent collision with rendering
+    boost::recursive_mutex::scoped_lock lock(mtx_);
+
     geometry_msgs::WrenchStamped msg;
     msg.header.stamp = ros::Time::now();
 
@@ -2114,6 +2453,9 @@ void FabricSimulator::publishZeroWrenches(){
 
 void FabricSimulator::checkStickedParticleForces()
 {
+    // With some kind of self lock to prevent collision with simulation
+    // boost::recursive_mutex::scoped_lock lock(mtx_);
+
     // Access the forces
     const Eigen::Matrix<Real,Eigen::Dynamic,3> &for_ptr = *fabric_.getForPtr();
 
@@ -2122,7 +2464,7 @@ void FabricSimulator::checkStickedParticleForces()
 
     // If the force check mode is invalid
     if (max_sticking_force_check_mode_ < 0 || max_sticking_force_check_mode_ > 3) {
-        ROS_WARN("Invalid force_check_mode value. Disabling the force check to unstick.");
+        ROS_WARN_ONCE("Disabling the force check to unstick.");
         max_sticking_force_check_mode_ = -1;
         return;
     }
@@ -2155,19 +2497,51 @@ void FabricSimulator::checkStickedParticleForces()
         }
     }
 
+    
     if (!particles_to_unstick.empty()) {
+        fabric_simulator::SyncParticleUpdateDataArray sync_particle_update_msg;
+
         std::string particles_to_unstick_str;
         for (int id_to_remove : particles_to_unstick) {
             // Remove IDs from the set
             sticked_ids_.erase(id_to_remove);
+
             // Build a log string
             particles_to_unstick_str += std::to_string(id_to_remove) + ", ";
+
+            // If this is not a dependent simulator, we need to send a message to sync the particle updates
+            if (!is_dependant_simulator_) {
+                // Create a new SyncParticleUpdateData
+                fabric_simulator::SyncParticleUpdateData particle_update_data;
+                
+                particle_update_data.type = fabric_simulator::SyncParticleUpdateData::SIMPLE_UPDATE;
+                particle_update_data.is_dynamic = true;
+                particle_update_data.fabric_id = 0; // If there is a single fabric, this is always 0
+                particle_update_data.particle_id = id_to_remove;
+                
+                // Assign a default position because we are making it dynamic
+                particle_update_data.position.x = 0.0;
+                particle_update_data.position.y = 0.0;
+                particle_update_data.position.z = 0.0;
+        
+                // Add to the sync message
+                sync_particle_update_msg.data.push_back(particle_update_data);
+            }
         }
         // ROS_INFO("Max force: %f, %f, %f", max_sticking_force_(0), max_sticking_force_(1), max_sticking_force_(2));
         ROS_INFO("Particles to unstick: %s", particles_to_unstick_str.c_str());
 
         // Finally unstick the particles
         fabric_.setDynamicParticles(particles_to_unstick);
+
+        // Send a message to the dependent simulators to sync the particle updates
+        if (!is_dependant_simulator_) {
+            // Publish the sync message
+            sync_particle_update_msg.header.stamp = ros::Time::now();
+            sync_particle_update_msg.header.frame_id = fabric_frame_id_;
+            pub_sync_particle_updates_.publish(sync_particle_update_msg);
+            ROS_INFO("Published SyncParticleUpdateDataArray message for fixNearestFabricParticle");
+        }
     }
 }
 

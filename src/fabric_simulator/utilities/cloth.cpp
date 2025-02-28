@@ -470,7 +470,7 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
     }
 }
 
-void Cloth::changeParticleDynamicity(const int &particle, const bool &is_dynamic){
+void Cloth::changeParticleDynamicity(const int &particle, const bool &is_dynamic, const Eigen::Matrix<Real,1,3>* pos){
     if(particle < 0 || particle >= is_dynamic_.size()) {
         throw std::out_of_range("Index out of bounds");
     }
@@ -480,6 +480,10 @@ void Cloth::changeParticleDynamicity(const int &particle, const bool &is_dynamic
         if (!is_dynamic){
             // Update Velocity to Zero when making the particle static
             updateAttachedVelocity(particle, Eigen::Matrix<Real,1,3>::Zero());
+            // Check if pos is provided
+            if (pos) {
+                updateAttachedPose(particle, *pos);
+            }
         }
     }
 }
