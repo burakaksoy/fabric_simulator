@@ -48,7 +48,7 @@ class TestGUI(qt_widgets.QWidget):
         super(TestGUI, self).__init__()
         self.shutdown_timer = qt_core.QTimer()
 
-        self.pub_rate_odom = rospy.get_param("~pub_rate_odom", 50)
+        self.pub_rate_odom = rospy.get_param("~pub_rate_odom", 100)
 
         self.initial_values_set = False  # Initialization state variable
 
@@ -68,7 +68,8 @@ class TestGUI(qt_widgets.QWidget):
         if self.mode == "simulation_test":
             simulator_node_name = "/fabric_simulator_node"
         elif self.mode == "composite_sheet_application_test":
-            simulator_node_name = ""
+            simulator_node_name = "/fabric_simulator"
+            # simulator_node_name = ""
         
         while not self.custom_static_particles:
             try:
@@ -114,7 +115,8 @@ class TestGUI(qt_widgets.QWidget):
         if self.mode == "simulation_test":
             self.initialize_modulus_services_and_publishers(simulator_node_name)
         elif self.mode == "composite_sheet_application_test":
-            self.initialize_modulus_services_and_publishers(simulator_node_name="/fabric_simulator")
+            self.initialize_modulus_services_and_publishers(simulator_node_name)
+            # self.initialize_modulus_services_and_publishers(simulator_node_name="/fabric_simulator")
 
         # Flag to check if orientation control is enabled, GUI is created accordingly
         self.is_orientation_control_enabled = False
