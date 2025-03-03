@@ -6,6 +6,7 @@ import rospy
 
 import numpy as np
 import time
+import threading
 
 import PyQt5.QtWidgets as qt_widgets
 import PyQt5.QtCore as qt_core
@@ -43,9 +44,19 @@ individual particles.
 # Velocity commands will only be considered if they are spaced closer than MAX_TIMESTEP
 MAX_TIMESTEP = 0.04  # Set it to ~ twice of pub rate odom
 
+def run_in_thread(callback):
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=callback, args=args, kwargs=kwargs)
+        thread.daemon = True
+        thread.start()
+    return wrapper
+
 class TestGUI(qt_widgets.QWidget):
     def __init__(self):
         super(TestGUI, self).__init__()
+        
+        self.lock = threading.Lock() # Lock for thread safety
+        
         self.shutdown_timer = qt_core.QTimer()
 
         self.pub_rate_odom = rospy.get_param("~pub_rate_odom", 100)
@@ -100,6 +111,8 @@ class TestGUI(qt_widgets.QWidget):
         # Sorting the list of particles in ascending order
         self.custom_static_particles.sort()
         self.binded_particles.sort()
+        
+        self.combined_particles = self.binded_particles + self.custom_static_particles
 
         self.odom_publishers = {}
 
@@ -128,7 +141,8 @@ class TestGUI(qt_widgets.QWidget):
         self.spacenav_twist_wait_timeout = rospy.Duration(1.0)  # Timeout duration to wait twist msg before zeroing in seconds
 
         self.sub_twist = rospy.Subscriber("/spacenav/twist", Twist, self.spacenav_twist_callback, queue_size=1)
-        self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, self.state_array_callback, queue_size=1)
+        # self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, self.state_array_callback, queue_size=1)
+        self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, run_in_thread(self.state_array_callback), queue_size=1)
 
         self.pub_change_dynamicity = rospy.Publisher("/change_particle_dynamicity", 
                                                         ChangeParticleDynamicity, queue_size=1)
@@ -138,6 +152,7 @@ class TestGUI(qt_widgets.QWidget):
                                                                     FixNearestFabricParticleRequest, queue_size=1)
 
         self.last_timestep_requests = {}
+
 
         self.odom_pub_timer = rospy.Timer(rospy.Duration(1. / self.pub_rate_odom), self.odom_pub_timer_callback)
 
@@ -1160,77 +1175,78 @@ class TestGUI(qt_widgets.QWidget):
     def odom_pub_timer_callback(self,event):
         # Reset spacenav_twist to zero if it's been long time since the last arrived
         self.check_spacenav_twist_wait_timeout()
+        
+        with self.lock:
+            # Handle manual control of each custom static particle and the binded particles
+            for particle in self.combined_particles:
+                # Do not proceed with the particles until the initial position values have been set
+                if not (particle in self.particle_positions):
+                    continue
 
-        # Handle manual control of each custom static particle and the binded particles
-        for particle in self.binded_particles + self.custom_static_particles:
-            # Do not proceed with the particles until the initial position values have been set
-            if not (particle in self.particle_positions):
-                continue
+                if self.buttons_manual[particle].isChecked():
+                    dt = self.get_timestep(particle)   
+                    # dt = 0.01
+                    # dt = 1. / self.pub_rate_odom
 
-            if self.buttons_manual[particle].isChecked():
-                dt = self.get_timestep(particle)   
-                # dt = 0.01
-                # dt = 1. / self.pub_rate_odom
+                    # simple time step integration using Twist data
+                    pose = Pose()
+                    pose.position.x = self.particle_positions[particle].x + dt*self.spacenav_twist.linear.x
+                    pose.position.y = self.particle_positions[particle].y + dt*self.spacenav_twist.linear.y
+                    pose.position.z = self.particle_positions[particle].z + dt*self.spacenav_twist.linear.z
 
-                # simple time step integration using Twist data
-                pose = Pose()
-                pose.position.x = self.particle_positions[particle].x + dt*self.spacenav_twist.linear.x
-                pose.position.y = self.particle_positions[particle].y + dt*self.spacenav_twist.linear.y
-                pose.position.z = self.particle_positions[particle].z + dt*self.spacenav_twist.linear.z
-
-                # # --------------------------------------------------------------
-                # # To update the orientation with the twist message
-                # Calculate the magnitude of the angular velocity vector
-                omega_magnitude = math.sqrt(self.spacenav_twist.angular.x**2 + 
-                                            self.spacenav_twist.angular.y**2 + 
-                                            self.spacenav_twist.angular.z**2)
-                
-                # print("omega_magnitude: " + str(omega_magnitude))
-
-                pose.orientation = self.particle_orientations[particle]
-
-                if omega_magnitude > 1e-9:  # Avoid division by zero
-                    # Create the delta quaternion based on world frame twist
-                    delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
-                        self.spacenav_twist.angular.x / omega_magnitude,
-                        self.spacenav_twist.angular.y / omega_magnitude,
-                        self.spacenav_twist.angular.z / omega_magnitude
-                    ])
+                    # # --------------------------------------------------------------
+                    # # To update the orientation with the twist message
+                    # Calculate the magnitude of the angular velocity vector
+                    omega_magnitude = math.sqrt(self.spacenav_twist.angular.x**2 + 
+                                                self.spacenav_twist.angular.y**2 + 
+                                                self.spacenav_twist.angular.z**2)
                     
-                    # Update the pose's orientation by multiplying delta quaternion with current orientation 
-                    # Note the order here. This applies the world frame rotation directly.
-                    current_quaternion = (
-                        pose.orientation.x,
-                        pose.orientation.y,
-                        pose.orientation.z,
-                        pose.orientation.w
-                    )
-                    
-                    new_quaternion = tf_trans.quaternion_multiply(delta_quat, current_quaternion)
-                    
-                    pose.orientation.x = new_quaternion[0]
-                    pose.orientation.y = new_quaternion[1]
-                    pose.orientation.z = new_quaternion[2]
-                    pose.orientation.w = new_quaternion[3]
-                # # --------------------------------------------------------------
+                    # print("omega_magnitude: " + str(omega_magnitude))
 
-                if particle in self.binded_particles:
-                    self.particle_positions[particle] = pose.position
-                    self.particle_orientations[particle] = pose.orientation
+                    pose.orientation = self.particle_orientations[particle]
 
-                # Prepare Odometry message
-                odom = Odometry()
-                odom.header.stamp = rospy.Time.now()
-                odom.header.frame_id = "map" 
-                
-                if particle in self.binded_particles:
-                    odom.child_frame_id = f"{particle}_odom"
-                if particle in self.custom_static_particles:
-                    odom.child_frame_id = f"particle_{particle}_odom"
-                
-                odom.pose.pose = pose
-                odom.twist.twist = self.spacenav_twist
-                self.odom_publishers[particle].publish(odom)
+                    if omega_magnitude > 1e-9:  # Avoid division by zero
+                        # Create the delta quaternion based on world frame twist
+                        delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
+                            self.spacenav_twist.angular.x / omega_magnitude,
+                            self.spacenav_twist.angular.y / omega_magnitude,
+                            self.spacenav_twist.angular.z / omega_magnitude
+                        ])
+                        
+                        # Update the pose's orientation by multiplying delta quaternion with current orientation 
+                        # Note the order here. This applies the world frame rotation directly.
+                        current_quaternion = (
+                            pose.orientation.x,
+                            pose.orientation.y,
+                            pose.orientation.z,
+                            pose.orientation.w
+                        )
+                        
+                        new_quaternion = tf_trans.quaternion_multiply(delta_quat, current_quaternion)
+                        
+                        pose.orientation.x = new_quaternion[0]
+                        pose.orientation.y = new_quaternion[1]
+                        pose.orientation.z = new_quaternion[2]
+                        pose.orientation.w = new_quaternion[3]
+                    # # --------------------------------------------------------------
+
+                    if particle in self.binded_particles:
+                        self.particle_positions[particle] = pose.position
+                        self.particle_orientations[particle] = pose.orientation
+
+                    # Prepare Odometry message
+                    odom = Odometry()
+                    odom.header.stamp = rospy.Time.now()
+                    odom.header.frame_id = "map" 
+                    
+                    if particle in self.binded_particles:
+                        odom.child_frame_id = f"{particle}_odom"
+                    if particle in self.custom_static_particles:
+                        odom.child_frame_id = f"particle_{particle}_odom"
+                    
+                    odom.pose.pose = pose
+                    odom.twist.twist = self.spacenav_twist
+                    self.odom_publishers[particle].publish(odom)
 
     def change_dynamicity_cb(self,particle, is_dynamic):
         msg = ChangeParticleDynamicity()
@@ -1258,12 +1274,13 @@ class TestGUI(qt_widgets.QWidget):
             rospy.loginfo_throttle(2.0,"spacenav_twist is zeroed because it's been long time since the last msg arrived..")
 
     def state_array_callback(self, states_msg):
-        # Positions
-        for particle in self.custom_static_particles:
-            # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
-                self.particle_positions[particle] = states_msg.states[particle].pose.position
-                self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
-                self.particle_twists[particle] = states_msg.states[particle].twist
+        with self.lock:
+            # Positions
+            for particle in self.custom_static_particles:
+                # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
+                    self.particle_positions[particle] = states_msg.states[particle].pose.position
+                    self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
+                    self.particle_twists[particle] = states_msg.states[particle].twist
 
 
     def initialize_binded_particle_positions(self):
