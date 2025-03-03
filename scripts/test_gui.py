@@ -26,6 +26,9 @@ from fabric_simulator.srv import GetFabricBendingCompliance
 
 from fabric_simulator.srv import EnableCollisionHandling
 
+from std_srvs.srv import SetBool, SetBoolResponse
+from std_srvs.srv import Empty, EmptyResponse
+
 from std_msgs.msg import Float32
 
 import math
@@ -130,6 +133,7 @@ class TestGUI(qt_widgets.QWidget):
         elif self.mode == "composite_sheet_application_test":
             self.initialize_modulus_services_and_publishers(simulator_node_name)
             # self.initialize_modulus_services_and_publishers(simulator_node_name="/fabric_simulator")
+            self.initialize_controller_services_and_publishers(controller_node_name="/composite_layup_velocity_controller")
 
         # Flag to check if orientation control is enabled, GUI is created accordingly
         self.is_orientation_control_enabled = False
@@ -163,10 +167,11 @@ class TestGUI(qt_widgets.QWidget):
         self.enable_collision_handling_service_name = simulator_node_name + "/enable_collision_handling"
 
         # Wait for services to be available
-        print("Waiting for services...")
+        print("Waiting for stiffness services...")
         rospy.wait_for_service(self.get_stretching_compliance_service_name)
         rospy.wait_for_service(self.get_bending_compliance_service_name)
-        print("Services are available.")
+        rospy.wait_for_service(self.enable_collision_handling_service_name)
+        print("Stiffness Services are available.")
 
         self.get_stretching_compliance_service_client = rospy.ServiceProxy(self.get_stretching_compliance_service_name, GetFabricStretchingCompliance)
         self.get_bending_compliance_service_client = rospy.ServiceProxy(self.get_bending_compliance_service_name, GetFabricBendingCompliance)
@@ -175,6 +180,35 @@ class TestGUI(qt_widgets.QWidget):
         # Publishers
         self.change_stretching_compliance_publisher = rospy.Publisher("/change_fabric_stretching_compliance", Float32, queue_size=1)
         self.change_bending_compliance_publisher = rospy.Publisher("/change_fabric_bending_compliance", Float32, queue_size=1)
+        
+    def initialize_controller_services_and_publishers(self, controller_node_name=""):        
+        # Service clients
+        self.set_enable_controller_service_name = controller_node_name + "/set_enable_controller"
+        self.set_pause_controller_service_name = controller_node_name + "/set_pause_controller"
+        self.set_nominal_control_enabled_service_name = controller_node_name + "/set_nominal_control_enabled"
+        self.set_obstacle_avoidance_enabled_service_name = controller_node_name + "/set_obstacle_avoidance_enabled"
+        self.set_stress_avoidance_enabled_service_name = controller_node_name + "/set_stress_avoidance_enabled"
+        self.reset_target_poses_wrt_leader_service_name = controller_node_name + "/reset_target_poses_wrt_leader"
+
+        # Wait for services to be available
+        print("Waiting for controller services...")
+        rospy.wait_for_service(self.set_enable_controller_service_name)
+        rospy.wait_for_service(self.set_pause_controller_service_name)
+        rospy.wait_for_service(self.set_nominal_control_enabled_service_name)
+        rospy.wait_for_service(self.set_obstacle_avoidance_enabled_service_name)
+        rospy.wait_for_service(self.set_stress_avoidance_enabled_service_name)
+        rospy.wait_for_service(self.reset_target_poses_wrt_leader_service_name)
+        print("Controller Services are available.")
+
+        self.set_enable_controller_service_client = rospy.ServiceProxy(self.set_enable_controller_service_name, SetBool)
+        self.set_pause_controller_service_client = rospy.ServiceProxy(self.set_pause_controller_service_name, SetBool)
+        self.set_nominal_control_enabled_service_client = rospy.ServiceProxy(self.set_nominal_control_enabled_service_name, SetBool)
+        self.set_obstacle_avoidance_enabled_service_client = rospy.ServiceProxy(self.set_obstacle_avoidance_enabled_service_name, SetBool)
+        self.set_stress_avoidance_enabled_service_client = rospy.ServiceProxy(self.set_stress_avoidance_enabled_service_name, SetBool)
+        self.reset_target_poses_wrt_leader_service_client = rospy.ServiceProxy(self.reset_target_poses_wrt_leader_service_name, Empty)
+
+        # Publishers
+        # Add here the publishers for the controller node ..
 
     def add_horizontal_line_to_layout(self, layout):
         # Create a horizontal line
@@ -203,6 +237,14 @@ class TestGUI(qt_widgets.QWidget):
         
         # Add a horizontal line here
         self.add_horizontal_line_to_layout(self.layout)
+        
+        # Add controller related interface if the mode is composite_sheet_application_test
+        if self.mode == "composite_sheet_application_test":
+            # Add controller related interface
+            self.add_controller_related_interface()
+            
+            # Add a horizontal line here
+            self.add_horizontal_line_to_layout(self.layout)
         
         # Combine the lists with boundary markers
         combined_particles = (self.binded_particles + ["_boundary_marker_"] +
@@ -507,6 +549,109 @@ class TestGUI(qt_widgets.QWidget):
 
             # Add the complete two-column layout to the overall layout
             self.layout.addLayout(main_layout)
+
+    def add_controller_related_interface(self):
+        # Add the controllers controls here
+        # Main horizontal layout that will hold columns and the separators
+        main_layout = qt_widgets.QHBoxLayout()
+        
+        # -------------------------------------------------------------
+        # Column 1: Reset Target Poses WRT Leader button layout
+        reset_target_poses_layout = qt_widgets.QVBoxLayout()
+        reset_target_poses_button = qt_widgets.QPushButton("Reset Target Poses")
+        reset_target_poses_button.clicked.connect(self.reset_target_poses_cb)
+        reset_target_poses_layout.addWidget(reset_target_poses_button)
+        
+        # Add the column 1 to the main layout
+        main_layout.addLayout(reset_target_poses_layout)
+        # Add vertical line separator that spans the height of both columns
+        self.add_vertical_line_to_layout(main_layout)
+        # -------------------------------------------------------------
+        
+        # -------------------------------------------------------------
+        # Column 2: Enable/Disable Nominal Control
+        nominal_control_layout = qt_widgets.QVBoxLayout()
+        nominal_control_enable_button = qt_widgets.QPushButton("Enable Nominal Control")
+        nominal_control_enable_button.clicked.connect(lambda _, is_enabled=True: self.nominal_control_toggle_cb(is_enabled))
+        nominal_control_layout.addWidget(nominal_control_enable_button)
+        
+        nominal_control_disable_button = qt_widgets.QPushButton("Disable Nominal Control")
+        nominal_control_disable_button.clicked.connect(lambda _, is_enabled=False: self.nominal_control_toggle_cb(is_enabled))
+        nominal_control_layout.addWidget(nominal_control_disable_button)
+        
+        # Add the column 2 to the main layout
+        main_layout.addLayout(nominal_control_layout)
+        # Add vertical line separator that spans the height of both columns
+        self.add_vertical_line_to_layout(main_layout)
+        # -------------------------------------------------------------
+        
+        # -------------------------------------------------------------
+        # Column 3: Enable/Disable Obstacle Avoidance
+        obstacle_avoidance_layout = qt_widgets.QVBoxLayout()
+        obstacle_avoidance_enable_button = qt_widgets.QPushButton("Enable Obstacle Avoidance")
+        obstacle_avoidance_enable_button.clicked.connect(lambda _, is_enabled=True: self.obstacle_avoidance_toggle_cb(is_enabled))
+        obstacle_avoidance_layout.addWidget(obstacle_avoidance_enable_button)
+        
+        obstacle_avoidance_disable_button = qt_widgets.QPushButton("Disable Obstacle Avoidance")
+        obstacle_avoidance_disable_button.clicked.connect(lambda _, is_enabled=False: self.obstacle_avoidance_toggle_cb(is_enabled))
+        obstacle_avoidance_layout.addWidget(obstacle_avoidance_disable_button)
+        
+        # Add the column 3 to the main layout
+        main_layout.addLayout(obstacle_avoidance_layout)
+        # Add vertical line separator that spans the height of both columns
+        self.add_vertical_line_to_layout(main_layout)
+        # -------------------------------------------------------------
+        
+        # -------------------------------------------------------------
+        # Column 4: Enable/Disable Stress Avoidance
+        stress_avoidance_layout = qt_widgets.QVBoxLayout()
+        stress_avoidance_enable_button = qt_widgets.QPushButton("Enable Stress Avoidance")
+        stress_avoidance_enable_button.clicked.connect(lambda _, is_enabled=True: self.stress_avoidance_toggle_cb(is_enabled))
+        stress_avoidance_layout.addWidget(stress_avoidance_enable_button)
+        
+        stress_avoidance_disable_button = qt_widgets.QPushButton("Disable Stress Avoidance")
+        stress_avoidance_disable_button.clicked.connect(lambda _, is_enabled=False: self.stress_avoidance_toggle_cb(is_enabled))
+        stress_avoidance_layout.addWidget(stress_avoidance_disable_button)
+        
+        # Add the column 4 to the main layout
+        main_layout.addLayout(stress_avoidance_layout)
+        # Add vertical line separator that spans the height of both columns
+        self.add_vertical_line_to_layout(main_layout)
+        # -------------------------------------------------------------
+        
+        # -------------------------------------------------------------
+        # Column 5: Pause/Resume Controller
+        pause_controller_layout = qt_widgets.QVBoxLayout()
+        pause_controller_button = qt_widgets.QPushButton("Pause Controller")
+        pause_controller_button.clicked.connect(lambda _, is_paused=True: self.pause_controller_toggle_cb(is_paused))
+        pause_controller_layout.addWidget(pause_controller_button)
+        
+        resume_controller_button = qt_widgets.QPushButton("Resume Controller")
+        resume_controller_button.clicked.connect(lambda _, is_paused=False: self.pause_controller_toggle_cb(is_paused))
+        pause_controller_layout.addWidget(resume_controller_button)
+        
+        # Add the column 5 to the main layout
+        main_layout.addLayout(pause_controller_layout)
+        # -------------------------------------------------------------
+        
+        # -------------------------------------------------------------
+        # Last Column: Enable/Disable Controller
+        controller_toggle_layout = qt_widgets.QVBoxLayout()
+        controller_enable_button = qt_widgets.QPushButton("Enable Controller")
+        controller_enable_button.clicked.connect(lambda _, is_enabled=True: self.controller_toggle_cb(is_enabled))
+        controller_toggle_layout.addWidget(controller_enable_button)
+        
+        controller_disable_button = qt_widgets.QPushButton("Disable Controller")
+        controller_disable_button.clicked.connect(lambda _, is_enabled=False: self.controller_toggle_cb(is_enabled))
+        controller_toggle_layout.addWidget(controller_disable_button)
+        
+        # Add the last column to the main layout
+        main_layout.addLayout(controller_toggle_layout)
+        # -------------------------------------------------------------
+        
+        # Add the main layout to the overall layout
+        self.layout.addLayout(main_layout)
+        
         
     def get_stretching_compliance_button_pressed_cb(self):
         try:
@@ -555,6 +700,75 @@ class TestGUI(qt_widgets.QWidget):
             rospy.loginfo("Published new Bending Compliance: %s", bending_compliance)
         except ValueError:
             rospy.logerr("Invalid value for Bending Compliance: %s", value_str)
+
+    # -------------------------------------------------------------------------------------
+    # Controller related callback functions
+    def reset_target_poses_cb(self):
+        try:
+            # Call the reset_target_poses_wrt_leader service
+            response = self.reset_target_poses_wrt_leader_service_client()
+            if response.success:
+                rospy.loginfo("Target Poses reset successfully.")
+            else:
+                rospy.logerr("Failed to reset target poses.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to reset_target_poses_wrt_leader failed: %s", e)
+            
+    def nominal_control_toggle_cb(self, is_enabled):
+        try:
+            # Call the set_nominal_control_enabled service
+            response = self.set_nominal_control_enabled_service_client(is_enabled)
+            if response.success:
+                rospy.loginfo("Nominal Control enabled/disabled successfully.")
+            else:
+                rospy.logerr("Failed to enable/disable nominal control.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to set_nominal_control_enabled failed: %s", e)
+            
+    def obstacle_avoidance_toggle_cb(self, is_enabled):
+        try:
+            # Call the set_obstacle_avoidance_enabled service
+            response = self.set_obstacle_avoidance_enabled_service_client(is_enabled)
+            if response.success:
+                rospy.loginfo("Obstacle Avoidance enabled/disabled successfully.")
+            else:
+                rospy.logerr("Failed to enable/disable obstacle avoidance.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to set_obstacle_avoidance_enabled failed: %s", e)
+            
+    def stress_avoidance_toggle_cb(self, is_enabled):
+        try:
+            # Call the set_stress_avoidance_enabled service
+            response = self.set_stress_avoidance_enabled_service_client(is_enabled)
+            if response.success:
+                rospy.loginfo("Stress Avoidance enabled/disabled successfully.")
+            else:
+                rospy.logerr("Failed to enable/disable stress avoidance.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to set_stress_avoidance_enabled failed: %s", e)
+
+    def pause_controller_toggle_cb(self, is_paused):
+        try:
+            # Call the set_pause_controller service
+            response = self.set_pause_controller_service_client(is_paused)
+            if response.success:
+                rospy.loginfo("Controller paused/resumed successfully.")
+            else:
+                rospy.logerr("Failed to pause/resume controller.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to set_pause_controller failed: %s", e)
+
+    def controller_toggle_cb(self, is_enabled):
+        try:
+            # Call the set_enable_controller service
+            response = self.set_enable_controller_service_client(is_enabled)
+            if response.success:
+                rospy.loginfo("Controller enabled/disabled successfully.")
+            else:
+                rospy.logerr("Failed to enable/disable controller.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to set_enable_controller failed: %s", e)
+    # -------------------------------------------------------------------------------------
 
     def format_number(self,num, digits=4):
         # When digits = 4, look at the affect of the function
