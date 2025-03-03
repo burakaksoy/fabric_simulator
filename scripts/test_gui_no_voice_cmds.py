@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-import os
+
 import rospy
 
 import numpy as np
@@ -33,10 +33,6 @@ from std_msgs.msg import Float32
 
 import math
 import tf.transformations as tf_trans
-
-from voice_recognition import VoiceCommandThread
-import pyttsx3 # For text-to-speech - OFFLINE
-from gtts import gTTS # For text-to-speech - Google's ONLINE
 
 """
 Author: Burak Aksoy
@@ -143,87 +139,6 @@ class TestGUI(qt_widgets.QWidget):
         self.is_orientation_control_enabled = False
         
         self.createUI()
-
-        # ---------------------------------------------------------
-        ## Voice commands related initializations
-        self.voice_offline_mode = False  # Set it to True for offline mode
-        
-        if self.voice_offline_mode:
-            # Initialize the text-to-speech engine for getting feedback from the voice commands
-            self.tts_engine = pyttsx3.init()
-            # Optionally set voice properties like rate or voice ID
-            self.tts_engine.setProperty('rate', 100)
-            # self.tts_engine.setProperty('voice', 'english-us')
-        
-        # Create a dictionary for recognized commands -> GUI actions
-        # The key is a spoken phrase, the value is a callable (could be a button click or a method)
-        self.voice_command_actions = {
-            "get stretching compliance": self.get_stretching_compliance_button_click,
-            "get bending compliance": self.get_bending_compliance_button_click,
-            
-            "enable collision handling": self.enable_collision_button_click,
-            
-            "disable collision handling": self.disable_collision_button_click,
-            
-            "reset target poses": self.reset_target_poses_button_click,
-            
-            "enable nominal control": self.enable_nominal_control_button_click,
-            
-            "disable nominal control": self.disable_nominal_control_button_click,
-            
-            "enable obstacle avoidance": self.enable_obstacle_avoidance_button_click,
-            "enable collision avoidance": self.enable_obstacle_avoidance_button_click,
-            
-            "disable obstacle avoidance": self.disable_obstacle_avoidance_button_click,
-            "disable collision avoidance": self.disable_obstacle_avoidance_button_click,
-            
-            "enable stress avoidance": self.enable_stress_avoidance_button_click,
-            
-            "disable stress avoidance": self.disable_stress_avoidance_button_click,
-            
-            "pause controller": self.pause_controller_button_click,
-            
-            "resume controller": self.resume_controller_button_click,
-            
-            "enable controller": self.enable_controller_button_click,
-            
-            "disable controller": self.disable_controller_button_click,
-            
-            "attach left hand": self.attach_left_hand_button_click,
-            "attached left hand": self.attach_left_hand_button_click,
-            
-            "detach left hand": self.detach_left_hand_button_click,
-            "detached left hand": self.detach_left_hand_button_click,
-            
-            "attach right hand": self.attach_right_hand_button_click,
-            "attached right hand": self.attach_right_hand_button_click,
-            
-            "detach right hand": self.detach_right_hand_button_click,
-            "detached right hand": self.detach_right_hand_button_click,
-            
-            "stick left": self.stick_left_button_click,
-            
-            "unstick left": self.unstick_left_button_click,
-            
-            "stick right": self.stick_right_button_click,
-            "unstick right": self.unstick_right_button_click,
-            
-            "get left corner position": self.get_left_corner_pose_from_particle,
-            
-            "get right corner position": self.get_right_corner_pose_from_particle,
-            
-            "set left position": self.set_left_position_button_click,
-            
-            "set right position": self.set_right_position_button_click,
-            # Add more voice commands here ..
-        }
-
-        # (important) Start the voice command thread
-        self.voice_thread = VoiceCommandThread(offline_mode=self.voice_offline_mode)
-        self.voice_thread.command_recognized.connect(self.handle_voice_command)
-        self.voice_thread.start()
-        # ---------------------------------------------------------        
-
 
         self.spacenav_twist = Twist()  # Set it to an empty twist message
         self.last_spacenav_twist_time = rospy.Time.now()  # For timestamping of the last twist msg
@@ -515,9 +430,9 @@ class TestGUI(qt_widgets.QWidget):
             compliance_layout = qt_widgets.QHBoxLayout()
 
             # Stretching Compliance Controls
-            self.get_stretching_compliance_button = qt_widgets.QPushButton("Get Stretching Compliance")
-            self.get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
-            compliance_layout.addWidget(self.get_stretching_compliance_button)
+            get_stretching_compliance_button = qt_widgets.QPushButton("Get Stretching Compliance")
+            get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
+            compliance_layout.addWidget(get_stretching_compliance_button)
 
             stretching_compliance_label = qt_widgets.QLabel("Stretching Compliance:")
             compliance_layout.addWidget(stretching_compliance_label)
@@ -527,16 +442,16 @@ class TestGUI(qt_widgets.QWidget):
             self.stretching_compliance_text_input.setMinimumWidth(100)
             compliance_layout.addWidget(self.stretching_compliance_text_input)
 
-            self.set_stretching_compliance_button = qt_widgets.QPushButton("Set Stretching Compliance")
-            self.set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
-            compliance_layout.addWidget(self.set_stretching_compliance_button)
+            set_stretching_compliance_button = qt_widgets.QPushButton("Set Stretching Compliance")
+            set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
+            compliance_layout.addWidget(set_stretching_compliance_button)
 
             self.add_vertical_line_to_layout(compliance_layout)
 
             # Bending Compliance Controls
-            self.get_bending_compliance_button = qt_widgets.QPushButton("Get Bending Compliance")
-            self.get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
-            compliance_layout.addWidget(self.get_bending_compliance_button)
+            get_bending_compliance_button = qt_widgets.QPushButton("Get Bending Compliance")
+            get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
+            compliance_layout.addWidget(get_bending_compliance_button)
 
             bending_compliance_label = qt_widgets.QLabel("Bending Compliance:")
             compliance_layout.addWidget(bending_compliance_label)
@@ -546,20 +461,20 @@ class TestGUI(qt_widgets.QWidget):
             self.bending_compliance_text_input.setMinimumWidth(100)
             compliance_layout.addWidget(self.bending_compliance_text_input)
 
-            self.set_bending_compliance_button = qt_widgets.QPushButton("Set Bending Compliance")
-            self.set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
-            compliance_layout.addWidget(self.set_bending_compliance_button)
+            set_bending_compliance_button = qt_widgets.QPushButton("Set Bending Compliance")
+            set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
+            compliance_layout.addWidget(set_bending_compliance_button)
 
             self.add_vertical_line_to_layout(compliance_layout)
             
             # Collision Handling Controls
-            self.enable_collision_button = qt_widgets.QPushButton("Enable Collision Handling")
-            self.enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
-            compliance_layout.addWidget(self.enable_collision_button)
+            enable_collision_button = qt_widgets.QPushButton("Enable Collision Handling")
+            enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
+            compliance_layout.addWidget(enable_collision_button)
 
-            self.disable_collision_button = qt_widgets.QPushButton("Disable Collision Handling")
-            self.disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
-            compliance_layout.addWidget(self.disable_collision_button)
+            disable_collision_button = qt_widgets.QPushButton("Disable Collision Handling")
+            disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
+            compliance_layout.addWidget(disable_collision_button)
 
             # Add the horizontal compliance_layout to the main layout
             self.layout.addLayout(compliance_layout)
@@ -575,9 +490,9 @@ class TestGUI(qt_widgets.QWidget):
 
             # Row 1: Stretching Compliance Controls (arranged horizontally)
             stretching_layout = qt_widgets.QHBoxLayout()
-            self.get_stretching_compliance_button = qt_widgets.QPushButton("Get Stretching Compliance")
-            self.get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
-            stretching_layout.addWidget(self.get_stretching_compliance_button)
+            get_stretching_compliance_button = qt_widgets.QPushButton("Get Stretching Compliance")
+            get_stretching_compliance_button.clicked.connect(self.get_stretching_compliance_button_pressed_cb)
+            stretching_layout.addWidget(get_stretching_compliance_button)
 
             stretching_compliance_label = qt_widgets.QLabel("Stretching Compliance:")
             stretching_layout.addWidget(stretching_compliance_label)
@@ -587,17 +502,17 @@ class TestGUI(qt_widgets.QWidget):
             self.stretching_compliance_text_input.setMinimumWidth(100)
             stretching_layout.addWidget(self.stretching_compliance_text_input)
 
-            self.set_stretching_compliance_button = qt_widgets.QPushButton("Set Stretching Compliance")
-            self.set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
-            stretching_layout.addWidget(self.set_stretching_compliance_button)
+            set_stretching_compliance_button = qt_widgets.QPushButton("Set Stretching Compliance")
+            set_stretching_compliance_button.clicked.connect(self.set_stretching_compliance_button_pressed_cb)
+            stretching_layout.addWidget(set_stretching_compliance_button)
 
             compliance_layout.addLayout(stretching_layout)
 
             # Row 2: Bending Compliance Controls (arranged horizontally)
             bending_layout = qt_widgets.QHBoxLayout()
-            self.get_bending_compliance_button = qt_widgets.QPushButton("Get Bending Compliance")
-            self.get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
-            bending_layout.addWidget(self.get_bending_compliance_button)
+            get_bending_compliance_button = qt_widgets.QPushButton("Get Bending Compliance")
+            get_bending_compliance_button.clicked.connect(self.get_bending_compliance_button_pressed_cb)
+            bending_layout.addWidget(get_bending_compliance_button)
 
             bending_compliance_label = qt_widgets.QLabel("Bending Compliance:")
             bending_layout.addWidget(bending_compliance_label)
@@ -607,21 +522,21 @@ class TestGUI(qt_widgets.QWidget):
             self.bending_compliance_text_input.setMinimumWidth(100)
             bending_layout.addWidget(self.bending_compliance_text_input)
 
-            self.set_bending_compliance_button = qt_widgets.QPushButton("Set Bending Compliance")
-            self.set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
-            bending_layout.addWidget(self.set_bending_compliance_button)
+            set_bending_compliance_button = qt_widgets.QPushButton("Set Bending Compliance")
+            set_bending_compliance_button.clicked.connect(self.set_bending_compliance_button_pressed_cb)
+            bending_layout.addWidget(set_bending_compliance_button)
 
             compliance_layout.addLayout(bending_layout)
 
             # Right column: Collision Handling Controls in a vertical layout
             collision_layout = qt_widgets.QVBoxLayout()
-            self.enable_collision_button = qt_widgets.QPushButton("Enable Collision Handling")
-            self.enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
-            collision_layout.addWidget(self.enable_collision_button)
+            enable_collision_button = qt_widgets.QPushButton("Enable Collision Handling")
+            enable_collision_button.clicked.connect(self.enable_collision_button_pressed_cb)
+            collision_layout.addWidget(enable_collision_button)
 
-            self.disable_collision_button = qt_widgets.QPushButton("Disable Collision Handling")
-            self.disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
-            collision_layout.addWidget(self.disable_collision_button)
+            disable_collision_button = qt_widgets.QPushButton("Disable Collision Handling")
+            disable_collision_button.clicked.connect(self.disable_collision_button_pressed_cb)
+            collision_layout.addWidget(disable_collision_button)
 
             # Add left column to the main layout
             main_layout.addLayout(compliance_layout)
@@ -643,9 +558,9 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         # Column 1: Reset Target Poses WRT Leader button layout
         reset_target_poses_layout = qt_widgets.QVBoxLayout()
-        self.reset_target_poses_button = qt_widgets.QPushButton("Reset Target Poses")
-        self.reset_target_poses_button.clicked.connect(self.reset_target_poses_cb)
-        reset_target_poses_layout.addWidget(self.reset_target_poses_button)
+        reset_target_poses_button = qt_widgets.QPushButton("Reset Target Poses")
+        reset_target_poses_button.clicked.connect(self.reset_target_poses_cb)
+        reset_target_poses_layout.addWidget(reset_target_poses_button)
         
         # Add the column 1 to the main layout
         main_layout.addLayout(reset_target_poses_layout)
@@ -656,13 +571,13 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         # Column 2: Enable/Disable Nominal Control
         nominal_control_layout = qt_widgets.QVBoxLayout()
-        self.nominal_control_enable_button = qt_widgets.QPushButton("Enable Nominal Control")
-        self.nominal_control_enable_button.clicked.connect(lambda _, is_enabled=True: self.nominal_control_toggle_cb(is_enabled))
-        nominal_control_layout.addWidget(self.nominal_control_enable_button)
+        nominal_control_enable_button = qt_widgets.QPushButton("Enable Nominal Control")
+        nominal_control_enable_button.clicked.connect(lambda _, is_enabled=True: self.nominal_control_toggle_cb(is_enabled))
+        nominal_control_layout.addWidget(nominal_control_enable_button)
         
-        self.nominal_control_disable_button = qt_widgets.QPushButton("Disable Nominal Control")
-        self.nominal_control_disable_button.clicked.connect(lambda _, is_enabled=False: self.nominal_control_toggle_cb(is_enabled))
-        nominal_control_layout.addWidget(self.nominal_control_disable_button)
+        nominal_control_disable_button = qt_widgets.QPushButton("Disable Nominal Control")
+        nominal_control_disable_button.clicked.connect(lambda _, is_enabled=False: self.nominal_control_toggle_cb(is_enabled))
+        nominal_control_layout.addWidget(nominal_control_disable_button)
         
         # Add the column 2 to the main layout
         main_layout.addLayout(nominal_control_layout)
@@ -673,13 +588,13 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         # Column 3: Enable/Disable Obstacle Avoidance
         obstacle_avoidance_layout = qt_widgets.QVBoxLayout()
-        self.obstacle_avoidance_enable_button = qt_widgets.QPushButton("Enable Obstacle Avoidance")
-        self.obstacle_avoidance_enable_button.clicked.connect(lambda _, is_enabled=True: self.obstacle_avoidance_toggle_cb(is_enabled))
-        obstacle_avoidance_layout.addWidget(self.obstacle_avoidance_enable_button)
+        obstacle_avoidance_enable_button = qt_widgets.QPushButton("Enable Obstacle Avoidance")
+        obstacle_avoidance_enable_button.clicked.connect(lambda _, is_enabled=True: self.obstacle_avoidance_toggle_cb(is_enabled))
+        obstacle_avoidance_layout.addWidget(obstacle_avoidance_enable_button)
         
-        self.obstacle_avoidance_disable_button = qt_widgets.QPushButton("Disable Obstacle Avoidance")
-        self.obstacle_avoidance_disable_button.clicked.connect(lambda _, is_enabled=False: self.obstacle_avoidance_toggle_cb(is_enabled))
-        obstacle_avoidance_layout.addWidget(self.obstacle_avoidance_disable_button)
+        obstacle_avoidance_disable_button = qt_widgets.QPushButton("Disable Obstacle Avoidance")
+        obstacle_avoidance_disable_button.clicked.connect(lambda _, is_enabled=False: self.obstacle_avoidance_toggle_cb(is_enabled))
+        obstacle_avoidance_layout.addWidget(obstacle_avoidance_disable_button)
         
         # Add the column 3 to the main layout
         main_layout.addLayout(obstacle_avoidance_layout)
@@ -690,13 +605,13 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         # Column 4: Enable/Disable Stress Avoidance
         stress_avoidance_layout = qt_widgets.QVBoxLayout()
-        self.stress_avoidance_enable_button = qt_widgets.QPushButton("Enable Stress Avoidance")
-        self.stress_avoidance_enable_button.clicked.connect(lambda _, is_enabled=True: self.stress_avoidance_toggle_cb(is_enabled))
-        stress_avoidance_layout.addWidget(self.stress_avoidance_enable_button)
+        stress_avoidance_enable_button = qt_widgets.QPushButton("Enable Stress Avoidance")
+        stress_avoidance_enable_button.clicked.connect(lambda _, is_enabled=True: self.stress_avoidance_toggle_cb(is_enabled))
+        stress_avoidance_layout.addWidget(stress_avoidance_enable_button)
         
-        self.stress_avoidance_disable_button = qt_widgets.QPushButton("Disable Stress Avoidance")
-        self.stress_avoidance_disable_button.clicked.connect(lambda _, is_enabled=False: self.stress_avoidance_toggle_cb(is_enabled))
-        stress_avoidance_layout.addWidget(self.stress_avoidance_disable_button)
+        stress_avoidance_disable_button = qt_widgets.QPushButton("Disable Stress Avoidance")
+        stress_avoidance_disable_button.clicked.connect(lambda _, is_enabled=False: self.stress_avoidance_toggle_cb(is_enabled))
+        stress_avoidance_layout.addWidget(stress_avoidance_disable_button)
         
         # Add the column 4 to the main layout
         main_layout.addLayout(stress_avoidance_layout)
@@ -707,13 +622,13 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         # Column 5: Pause/Resume Controller
         pause_controller_layout = qt_widgets.QVBoxLayout()
-        self.pause_controller_button = qt_widgets.QPushButton("Pause Controller")
-        self.pause_controller_button.clicked.connect(lambda _, is_paused=True: self.pause_controller_toggle_cb(is_paused))
-        pause_controller_layout.addWidget(self.pause_controller_button)
+        pause_controller_button = qt_widgets.QPushButton("Pause Controller")
+        pause_controller_button.clicked.connect(lambda _, is_paused=True: self.pause_controller_toggle_cb(is_paused))
+        pause_controller_layout.addWidget(pause_controller_button)
         
-        self.resume_controller_button = qt_widgets.QPushButton("Resume Controller")
-        self.resume_controller_button.clicked.connect(lambda _, is_paused=False: self.pause_controller_toggle_cb(is_paused))
-        pause_controller_layout.addWidget(self.resume_controller_button)
+        resume_controller_button = qt_widgets.QPushButton("Resume Controller")
+        resume_controller_button.clicked.connect(lambda _, is_paused=False: self.pause_controller_toggle_cb(is_paused))
+        pause_controller_layout.addWidget(resume_controller_button)
         
         # Add the column 5 to the main layout
         main_layout.addLayout(pause_controller_layout)
@@ -722,13 +637,13 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         # Last Column: Enable/Disable Controller
         controller_toggle_layout = qt_widgets.QVBoxLayout()
-        self.controller_enable_button = qt_widgets.QPushButton("Enable Controller")
-        self.controller_enable_button.clicked.connect(lambda _, is_enabled=True: self.controller_toggle_cb(is_enabled))
-        controller_toggle_layout.addWidget(self.controller_enable_button)
+        controller_enable_button = qt_widgets.QPushButton("Enable Controller")
+        controller_enable_button.clicked.connect(lambda _, is_enabled=True: self.controller_toggle_cb(is_enabled))
+        controller_toggle_layout.addWidget(controller_enable_button)
         
-        self.controller_disable_button = qt_widgets.QPushButton("Disable Controller")
-        self.controller_disable_button.clicked.connect(lambda _, is_enabled=False: self.controller_toggle_cb(is_enabled))
-        controller_toggle_layout.addWidget(self.controller_disable_button)
+        controller_disable_button = qt_widgets.QPushButton("Disable Controller")
+        controller_disable_button.clicked.connect(lambda _, is_enabled=False: self.controller_toggle_cb(is_enabled))
+        controller_toggle_layout.addWidget(controller_disable_button)
         
         # Add the last column to the main layout
         main_layout.addLayout(controller_toggle_layout)
@@ -792,7 +707,10 @@ class TestGUI(qt_widgets.QWidget):
         try:
             # Call the reset_target_poses_wrt_leader service
             response = self.reset_target_poses_wrt_leader_service_client()
-            rospy.loginfo("Target Poses reset successfully.")
+            if response.success:
+                rospy.loginfo("Target Poses reset successfully.")
+            else:
+                rospy.logerr("Failed to reset target poses.")
         except rospy.ServiceException as e:
             rospy.logerr("Service call to reset_target_poses_wrt_leader failed: %s", e)
             
@@ -852,143 +770,6 @@ class TestGUI(qt_widgets.QWidget):
             rospy.logerr("Service call to set_enable_controller failed: %s", e)
     # -------------------------------------------------------------------------------------
 
-    # -------------------------------------------------------------------------------------
-    # Voice recognition related functions
-    # Provide small wrapper methods you can call from voice_command_actions:
-    def reset_target_poses_button_click(self):
-        self.reset_target_poses_button.click()
-
-    def enable_nominal_control_button_click(self):
-        self.nominal_control_enable_button.click()
-
-    def disable_nominal_control_button_click(self):
-        self.nominal_control_disable_button.click()
-        
-    def get_stretching_compliance_button_click(self):
-        self.get_stretching_compliance_button.click()
-
-    def get_bending_compliance_button_click(self):
-        self.get_bending_compliance_button.click()
-
-    def enable_collision_button_click(self):
-        self.enable_collision_button.click()
-
-    def disable_collision_button_click(self):
-        self.disable_collision_button.click()
-
-    def enable_obstacle_avoidance_button_click(self):
-        self.obstacle_avoidance_enable_button.click()
-
-    def disable_obstacle_avoidance_button_click(self):
-        self.obstacle_avoidance_disable_button.click()
-
-    def enable_stress_avoidance_button_click(self):
-        self.stress_avoidance_enable_button.click()
-
-    def disable_stress_avoidance_button_click(self):
-        self.stress_avoidance_disable_button.click()
-
-    def pause_controller_button_click(self):
-        self.pause_controller_button.click()
-
-    def resume_controller_button_click(self):
-        self.resume_controller_button.click()
-
-    def enable_controller_button_click(self):
-        self.controller_enable_button.click()
-
-    def disable_controller_button_click(self):
-        self.controller_disable_button.click()
-        
-    def attach_left_hand_button_click(self):
-        # left hand is "hand_2"
-        self.attach_hand_to_fabric_cb("hand_2", is_attach=True)
-
-    def detach_left_hand_button_click(self):
-        self.attach_hand_to_fabric_cb("hand_2", is_attach=False)
-
-    def attach_right_hand_button_click(self):
-        # right hand is "hand_1"
-        self.attach_hand_to_fabric_cb("hand_1", is_attach=True)
-
-    def detach_right_hand_button_click(self):
-        self.attach_hand_to_fabric_cb("hand_1", is_attach=False)
-
-    def stick_left_button_click(self):
-        # again, left is "hand_2"
-        self.stick_nearest_fabric_particle_cb("hand_2", is_stick=True)
-
-    def unstick_left_button_click(self):
-        self.stick_nearest_fabric_particle_cb("hand_2", is_stick=False)
-
-    def stick_right_button_click(self):
-        # right is "hand_1"
-        self.stick_nearest_fabric_particle_cb("hand_1", is_stick=True)
-
-    def unstick_right_button_click(self):
-        self.stick_nearest_fabric_particle_cb("hand_1", is_stick=False)
-        
-    def get_left_corner_pose_from_particle(self):
-        # Assuming 4 custom static particles are present, the left corner particle is the second last particle
-        particle = self.custom_static_particles[-2] # left_hand_corresponding_particle
-        text_input_particle = "hand_2" # left hand
-        self.get_pose_common(particle, text_input_particle)
-        
-    def get_right_corner_pose_from_particle(self):
-        # Assuming 4 custom static particles are present, the right corner particle is the last particle
-        particle = self.custom_static_particles[-1]
-        text_input_particle = "hand_1" # right hand
-        self.get_pose_common(particle, text_input_particle)
-        
-    def set_left_position_button_click(self):
-        self.set_position_cb_basic("hand_2")
-        
-    def set_right_position_button_click(self):
-        self.set_position_cb_basic("hand_1")
-
-
-    # Slot that is called whenever we get recognized text
-    def handle_voice_command(self, recognized_text):
-        # See if recognized_text matches a known command
-        if recognized_text in self.voice_command_actions:
-            rospy.loginfo(f"Executing command: {recognized_text}")
-            
-            # Call the associated action
-            self.voice_command_actions[recognized_text]()
-            
-            # Provide audible feedback
-            # self.say_text(f"I heard {recognized_text}.")
-            self.say_text(f"{recognized_text}.")
-        else:
-            rospy.logwarn(f"No matching command for: {recognized_text}")
-            
-            # Provide audible feedback
-            self.say_text(f"I did not understand.")
-
-    def say_text(self, text):
-        if self.voice_offline_mode:
-            self.tts_engine.say(text)
-            self.tts_engine.runAndWait()
-        else:
-            self.speak_online(text)
-        
-    def speak_online(self, text, filename="temp.mp3"):
-        """Convert text to speech and play the sound."""
-        try:
-            # Generate speech
-            tts = gTTS(text=text, lang="en", slow=False)
-            tts.save(filename)
-
-            # Play the saved audio file
-            # os.system(f"start {filename}")  # Windows
-            # os.system(f"afplay {filename}")  # macOS
-            # os.system(f"mpg321 {filename}")  # Linux
-            os.system(f"ffplay -nodisp -autoexit {filename}")
-
-        except Exception as e:
-            rospy.logerr(f"Error in text-to-speech: {e}")
-    # -------------------------------------------------------------------------------------
-
     def format_number(self,num, digits=4):
         # When digits = 4, look at the affect of the function
         # print(format_number(5))         # Output: '5.0'
@@ -1004,14 +785,12 @@ class TestGUI(qt_widgets.QWidget):
         else:
             return f'{rounded_num:.4f}'.rstrip('0').rstrip('.')
 
-    def get_pose_common(self, particle, text_input_particle=None):
+    def get_pose_button_pressed_cb(self, particle):
         """
         Gets the current pose of the particle 
         and fills the text_inputs for pos and ori accordingly
         """
-        if text_input_particle is None:
-            text_input_particle = particle
-        
+
         # Check if the particle pose is set
         if (particle in self.particle_positions) and (particle in self.particle_orientations):
             # Get Current Pose of the particle in world frame
@@ -1019,23 +798,20 @@ class TestGUI(qt_widgets.QWidget):
             ori = self.particle_orientations[particle] # Quaternion() msg of ROS geometry_msgs
 
             # Fill the position text inputs with the current position
-            self.text_inputs_pos[text_input_particle]['x'].setText(self.format_number(pos.x,digits=3)) 
-            self.text_inputs_pos[text_input_particle]['y'].setText(self.format_number(pos.y,digits=3)) 
-            self.text_inputs_pos[text_input_particle]['z'].setText(self.format_number(pos.z,digits=3)) 
+            self.text_inputs_pos[particle]['x'].setText(self.format_number(pos.x,digits=3)) 
+            self.text_inputs_pos[particle]['y'].setText(self.format_number(pos.y,digits=3)) 
+            self.text_inputs_pos[particle]['z'].setText(self.format_number(pos.z,digits=3)) 
 
             if self.is_orientation_control_enabled:
                 # Convert quaternion orientation to RPY (Roll-pitch-yaw) Euler Angles (degrees)
                 rpy = np.rad2deg(tf_trans.euler_from_quaternion([ori.x,ori.y,ori.z,ori.w]))
 
                 # Fill the orientation text  inputs with the current RPY orientation
-                self.text_inputs_ori[text_input_particle]['x'].setText(self.format_number(rpy[0],digits=1))
-                self.text_inputs_ori[text_input_particle]['y'].setText(self.format_number(rpy[1],digits=1))
-                self.text_inputs_ori[text_input_particle]['z'].setText(self.format_number(rpy[2],digits=1))
+                self.text_inputs_ori[particle]['x'].setText(self.format_number(rpy[0],digits=1))
+                self.text_inputs_ori[particle]['y'].setText(self.format_number(rpy[1],digits=1))
+                self.text_inputs_ori[particle]['z'].setText(self.format_number(rpy[2],digits=1))
         else:
             rospy.logwarn(f"Key '{particle}' not found in the particle_positions and particle_orientations dictionaries.")
-
-    def get_pose_button_pressed_cb(self, particle):
-        self.get_pose_common(particle)
 
     def set_position_cb_basic(self, particle):
         pose = Pose()
@@ -1769,7 +1545,6 @@ class TestGUI(qt_widgets.QWidget):
 
     def check_shutdown(self):
         if rospy.is_shutdown():
-            self.voice_thread.stop()  # Tell the voice thread to stop
             qt_widgets.QApplication.quit()
 
     
