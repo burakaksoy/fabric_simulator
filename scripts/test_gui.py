@@ -968,12 +968,17 @@ class TestGUI(qt_widgets.QWidget):
             
             # Provide audible feedback
             # self.say_text(f"I heard {recognized_text}.")
-            self.say_text(f"{recognized_text}.")
+            # self.say_text(f"{recognized_text}.")
+            filename="/usr/share/sounds/Yaru/stereo/complete.oga"
+            os.system(f"ffplay -nodisp -autoexit {filename}")
+            
         else:
             rospy.logwarn(f"No matching command for: {recognized_text}")
             
             # Provide audible feedback
-            self.say_text(f"I did not understand.")
+            # self.say_text(f"I did not understand.")
+            filename="/usr/share/sounds/Yaru/stereo/dialog-error.oga"
+            os.system(f"ffplay -nodisp -autoexit {filename}")
 
     def say_text(self, text):
         if self.voice_offline_mode:
