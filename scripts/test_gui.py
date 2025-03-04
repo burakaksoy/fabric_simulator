@@ -228,8 +228,18 @@ class TestGUI(qt_widgets.QWidget):
         self.spacenav_twist = Twist()  # Set it to an empty twist message
         self.last_spacenav_twist_time = rospy.Time.now()  # For timestamping of the last twist msg
         self.spacenav_twist_wait_timeout = rospy.Duration(1.0)  # Timeout duration to wait twist msg before zeroing in seconds
-
         self.sub_twist = rospy.Subscriber("/spacenav/twist", Twist, self.spacenav_twist_callback, queue_size=1)
+        
+        # Set it to True if you have a second spacenav twist topic to control the second (left) hand
+        self.dual_spacenav_twist = rospy.get_param("~dual_spacenav_twist", False)
+        
+        if self.dual_spacenav_twist:
+            self.spacenav_twist2 = Twist()  # Set it to an empty twist message
+            self.last_spacenav_twist2_time = rospy.Time.now()  # For timestamping of the last twist msg
+            self.spacenav_twist2_wait_timeout = rospy.Duration(1.0)  # Timeout duration to wait twist msg before zeroing in seconds
+            self.sub_twist2 = rospy.Subscriber("/spacenav2/twist", Twist, self.spacenav_twist2_callback, queue_size=1)
+        
+        
         # self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, self.state_array_callback, queue_size=1)
         self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, run_in_thread(self.state_array_callback), queue_size=1)
 
@@ -1614,6 +1624,9 @@ class TestGUI(qt_widgets.QWidget):
         # Reset spacenav_twist to zero if it's been long time since the last arrived
         self.check_spacenav_twist_wait_timeout()
         
+        if self.dual_spacenav_twist:
+            self.check_spacenav_twist2_wait_timeout()
+        
         with self.lock:
             # Handle manual control of each custom static particle and the binded particles
             for particle in self.combined_particles:
@@ -1625,19 +1638,25 @@ class TestGUI(qt_widgets.QWidget):
                     dt = self.get_timestep(particle)   
                     # dt = 0.01
                     # dt = 1. / self.pub_rate_odom
+                    
+                    # If second spacenav twist is enabled, use the second spacenav twist for hand_2 particle
+                    if self.dual_spacenav_twist and particle == "hand_2":
+                        twist_cmd = self.spacenav_twist2
+                    else:
+                        twist_cmd = self.spacenav_twist
 
                     # simple time step integration using Twist data
                     pose = Pose()
-                    pose.position.x = self.particle_positions[particle].x + dt*self.spacenav_twist.linear.x
-                    pose.position.y = self.particle_positions[particle].y + dt*self.spacenav_twist.linear.y
-                    pose.position.z = self.particle_positions[particle].z + dt*self.spacenav_twist.linear.z
+                    pose.position.x = self.particle_positions[particle].x + dt*twist_cmd.linear.x
+                    pose.position.y = self.particle_positions[particle].y + dt*twist_cmd.linear.y
+                    pose.position.z = self.particle_positions[particle].z + dt*twist_cmd.linear.z
 
                     # # --------------------------------------------------------------
                     # # To update the orientation with the twist message
                     # Calculate the magnitude of the angular velocity vector
-                    omega_magnitude = math.sqrt(self.spacenav_twist.angular.x**2 + 
-                                                self.spacenav_twist.angular.y**2 + 
-                                                self.spacenav_twist.angular.z**2)
+                    omega_magnitude = math.sqrt(twist_cmd.angular.x**2 + 
+                                                twist_cmd.angular.y**2 + 
+                                                twist_cmd.angular.z**2)
                     
                     # print("omega_magnitude: " + str(omega_magnitude))
 
@@ -1646,9 +1665,9 @@ class TestGUI(qt_widgets.QWidget):
                     if omega_magnitude > 1e-9:  # Avoid division by zero
                         # Create the delta quaternion based on world frame twist
                         delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
-                            self.spacenav_twist.angular.x / omega_magnitude,
-                            self.spacenav_twist.angular.y / omega_magnitude,
-                            self.spacenav_twist.angular.z / omega_magnitude
+                            twist_cmd.angular.x / omega_magnitude,
+                            twist_cmd.angular.y / omega_magnitude,
+                            twist_cmd.angular.z / omega_magnitude
                         ])
                         
                         # Update the pose's orientation by multiplying delta quaternion with current orientation 
@@ -1683,7 +1702,7 @@ class TestGUI(qt_widgets.QWidget):
                         odom.child_frame_id = f"particle_{particle}_odom"
                     
                     odom.pose.pose = pose
-                    odom.twist.twist = self.spacenav_twist
+                    odom.twist.twist = twist_cmd
                     self.odom_publishers[particle].publish(odom)
 
     def change_dynamicity_cb(self,particle, is_dynamic):
@@ -1693,16 +1712,14 @@ class TestGUI(qt_widgets.QWidget):
         self.pub_change_dynamicity.publish(msg)
 
     def spacenav_twist_callback(self, twist):
-        # self.spacenav_twist.linear.x = twist.linear.x # because we are in YZ plane
-        # self.spacenav_twist.linear.y = twist.linear.y
-        # self.spacenav_twist.linear.z = twist.linear.z
-        # self.spacenav_twist.angular.x = twist.angular.x
-        # self.spacenav_twist.angular.y = twist.angular.y  # twist.angular.y because we are in YZ plane
-        # self.spacenav_twist.angular.z = twist.angular.z  # twist.angular.z because we are in YZ plane
-        
         self.spacenav_twist = twist
 
         self.last_spacenav_twist_time = rospy.Time.now()
+        
+    def spacenav_twist2_callback(self, twist):
+        self.spacenav_twist2 = twist
+
+        self.last_spacenav_twist2_time = rospy.Time.now()
 
     def check_spacenav_twist_wait_timeout(self):
         if (rospy.Time.now() - self.last_spacenav_twist_time) > self.spacenav_twist_wait_timeout:
@@ -1710,6 +1727,13 @@ class TestGUI(qt_widgets.QWidget):
             self.spacenav_twist = Twist()
 
             rospy.loginfo_throttle(2.0,"spacenav_twist is zeroed because it's been long time since the last msg arrived..")
+            
+    def check_spacenav_twist2_wait_timeout(self):
+        if (rospy.Time.now() - self.last_spacenav_twist2_time) > self.spacenav_twist2_wait_timeout:
+            # Reset spacenav_twist to zero after timeout
+            self.spacenav_twist2 = Twist()
+
+            rospy.loginfo_throttle(2.0,"spacenav_twist2 is zeroed because it's been long time since the last msg arrived..")
 
     def state_array_callback(self, states_msg):
         with self.lock:
