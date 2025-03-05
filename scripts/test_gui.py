@@ -241,7 +241,7 @@ class TestGUI(qt_widgets.QWidget):
         
         
         # self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, self.state_array_callback, queue_size=1)
-        self.sub_state_array = rospy.Subscriber("/fabric_state", SegmentStateArray, run_in_thread(self.state_array_callback), queue_size=1)
+        self.sub_state_array = rospy.Subscriber("/fabric_state" + "_minimal", SegmentStateArray, run_in_thread(self.state_array_callback), queue_size=1)
 
         self.pub_change_dynamicity = rospy.Publisher("/change_particle_dynamicity", 
                                                         ChangeParticleDynamicity, queue_size=1)
@@ -1742,12 +1742,22 @@ class TestGUI(qt_widgets.QWidget):
 
     def state_array_callback(self, states_msg):
         with self.lock:
-            # Positions
-            for particle in self.custom_static_particles:
-                # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
-                    self.particle_positions[particle] = states_msg.states[particle].pose.position
-                    self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
-                    self.particle_twists[particle] = states_msg.states[particle].twist
+            # for particle in self.custom_static_particles:
+            #     # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
+            #         self.particle_positions[particle] = states_msg.states[particle].pose.position
+            #         self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
+            #         self.particle_twists[particle] = states_msg.states[particle].twist
+            
+            # Convert to a set for faster membership checks
+            custom_particle_ids = set(self.custom_static_particles)
+
+            for segment_state in states_msg.states:
+                seg_id = segment_state.id
+                # Only update if this ID is in the custom_static_particles
+                if seg_id in custom_particle_ids:
+                    self.particle_positions[seg_id] = segment_state.pose.position
+                    self.particle_orientations[seg_id] = segment_state.pose.orientation
+                    self.particle_twists[seg_id] = segment_state.twist
 
 
     def initialize_binded_particle_positions(self):

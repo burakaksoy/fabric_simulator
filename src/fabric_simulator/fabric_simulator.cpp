@@ -598,6 +598,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
         if (p_active_) {
             // Create visualization marker publisher
             pub_fabric_state_ = nh_.advertise<fabric_simulator::SegmentStateArray>(fabric_state_topic_name_, 1);
+            pub_fabric_state_minimal_ = nh_.advertise<fabric_simulator::SegmentStateArray>(fabric_state_topic_name_+"_minimal", 1);
             pub_fabric_marker_array_ = nh_.advertise<visualization_msgs::MarkerArray>(fabric_markers_topic_name_, 1);
 
             // Create subscribers
@@ -727,6 +728,7 @@ bool FabricSimulator::updateParams(std_srvs::Empty::Request& req, std_srvs::Empt
             // Stop publishers
             pub_fabric_marker_array_.shutdown();
             pub_fabric_state_.shutdown();
+            pub_fabric_state_minimal_.shutdown();
 
             pub_face_tri_ids_.shutdown();
 
@@ -2863,6 +2865,7 @@ void FabricSimulator::publishFabricState(const ros::TimerEvent& e){
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
     fabric_simulator::SegmentStateArray states_msg;
+    fabric_simulator::SegmentStateArray states_msg_minimal;
 
     // Set the fabric_id 
     states_msg.fabric_id = 0;  // TODO: Replace in future with fabric_id obtaining method
@@ -2917,8 +2920,14 @@ void FabricSimulator::publishFabricState(const ros::TimerEvent& e){
 
         // Add the segment state to the message
         states_msg.states.push_back(segment_state);
+
+        // If particle is in the custom_static_particles_ vector, add it to the minimal message
+        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) != custom_static_particles_.end()) {
+            states_msg_minimal.states.push_back(segment_state);
+        }
     }
 
     // Publish the message
     pub_fabric_state_.publish(states_msg);
+    pub_fabric_state_minimal_.publish(states_msg_minimal);
 }

@@ -237,6 +237,7 @@ private:
     boost::recursive_mutex &mtx_;
 
     ros::Publisher pub_fabric_state_;
+    ros::Publisher pub_fabric_state_minimal_; // only publish the state of custom static particles
     ros::Publisher pub_fabric_marker_array_;
 
     ros::Publisher pub_face_tri_ids_;
