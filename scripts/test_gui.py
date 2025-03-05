@@ -1658,38 +1658,39 @@ class TestGUI(qt_widgets.QWidget):
 
                     # # --------------------------------------------------------------
                     # # To update the orientation with the twist message
-                    # Calculate the magnitude of the angular velocity vector
-                    omega_magnitude = math.sqrt(twist_cmd.angular.x**2 + 
-                                                twist_cmd.angular.y**2 + 
-                                                twist_cmd.angular.z**2)
-                    
-                    # print("omega_magnitude: " + str(omega_magnitude))
-
                     pose.orientation = self.particle_orientations[particle]
 
-                    if omega_magnitude > 1e-9:  # Avoid division by zero
-                        # Create the delta quaternion based on world frame twist
-                        delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
-                            twist_cmd.angular.x / omega_magnitude,
-                            twist_cmd.angular.y / omega_magnitude,
-                            twist_cmd.angular.z / omega_magnitude
-                        ])
+                    if self.is_orientation_control_enabled:           
+                        # Calculate the magnitude of the angular velocity vector
+                        omega_magnitude = math.sqrt(twist_cmd.angular.x**2 + 
+                                                    twist_cmd.angular.y**2 + 
+                                                    twist_cmd.angular.z**2)
                         
-                        # Update the pose's orientation by multiplying delta quaternion with current orientation 
-                        # Note the order here. This applies the world frame rotation directly.
-                        current_quaternion = (
-                            pose.orientation.x,
-                            pose.orientation.y,
-                            pose.orientation.z,
-                            pose.orientation.w
-                        )
-                        
-                        new_quaternion = tf_trans.quaternion_multiply(delta_quat, current_quaternion)
-                        
-                        pose.orientation.x = new_quaternion[0]
-                        pose.orientation.y = new_quaternion[1]
-                        pose.orientation.z = new_quaternion[2]
-                        pose.orientation.w = new_quaternion[3]
+                        # print("omega_magnitude: " + str(omega_magnitude))
+
+                        if omega_magnitude > 1e-9:  # Avoid division by zero
+                            # Create the delta quaternion based on world frame twist
+                            delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
+                                twist_cmd.angular.x / omega_magnitude,
+                                twist_cmd.angular.y / omega_magnitude,
+                                twist_cmd.angular.z / omega_magnitude
+                            ])
+                            
+                            # Update the pose's orientation by multiplying delta quaternion with current orientation 
+                            # Note the order here. This applies the world frame rotation directly.
+                            current_quaternion = (
+                                pose.orientation.x,
+                                pose.orientation.y,
+                                pose.orientation.z,
+                                pose.orientation.w
+                            )
+                            
+                            new_quaternion = tf_trans.quaternion_multiply(delta_quat, current_quaternion)
+                            
+                            pose.orientation.x = new_quaternion[0]
+                            pose.orientation.y = new_quaternion[1]
+                            pose.orientation.z = new_quaternion[2]
+                            pose.orientation.w = new_quaternion[3]
                     # # --------------------------------------------------------------
 
                     if particle in self.binded_particles:
