@@ -1,7 +1,7 @@
 #ifndef __BOUNDINGSPHERE_H__
 #define __BOUNDINGSPHERE_H__
 
-#include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/Common.h"
 #include <vector>
 
 namespace utilities

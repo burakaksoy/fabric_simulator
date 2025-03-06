@@ -1,7 +1,7 @@
 #ifndef __BOUNDINGSPHEREHIERARCHY_H__
 #define __BOUNDINGSPHEREHIERARCHY_H__
 
-#include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/Common.h"
 #include "fabric_simulator/utilities/BoundingSphere.h"
 #include "fabric_simulator/utilities/kdTree.h"
 

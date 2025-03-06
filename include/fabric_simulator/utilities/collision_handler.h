@@ -6,13 +6,16 @@
 #ifndef COLLISION_HANDLER_H
 #define COLLISION_HANDLER_H
 
-#include "fabric_simulator/utilities/cloth.h"
-
 // #include "Discregrid/All" // rigid_body_scene_loader.h already includes it
 #include "fabric_simulator/utilities/AABB.h"
 #include "fabric_simulator/utilities/BoundingSphereHierarchy.h"
 
-#include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/Common.h"
+// #include "fabric_simulator/utilities/cloth.h"
+namespace pbd_object {
+    class Cloth; // forward declare
+}
+
 #include "fabric_simulator/utilities/rigid_body_scene_loader.h"
 
 #include <memory> // needed for std::shared_ptr
@@ -232,6 +235,14 @@ namespace utilities
                                         const Real &dt);
         };
 
+        struct NearestSurfaceData
+        {
+            bool found = false;
+            Real distance = std::numeric_limits<Real>::max();
+            Eigen::Matrix<Real, 3, 1> closestPointWorld;
+            Eigen::Matrix<Real, 3, 1> normalWorld;
+            unsigned int rigidBodyIndex = 0; 
+        };
 
         // Functions
         // CollisionHandler(); // Default constructor
@@ -524,6 +535,11 @@ namespace utilities
         }
 
         void computeMinDistancesToRigidBodies(std::vector<std::vector<MinDistanceData>> &min_distances_mt);
+
+        // This projects a single point onto the nearest rigid-body surface
+        // among all collision objects. Returns data in nearestData.
+        bool projectPointOnRigidBodySurface(const Eigen::Matrix<Real, 3, 1> &pointWorld,
+                                            NearestSurfaceData &nearestData);
 
     private:
         // Variables

@@ -3,6 +3,7 @@
  */
 
 #include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/utilities/collision_handler.h"
 
 using namespace pbd_object;
 
@@ -750,6 +751,104 @@ void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r
     else{ // Detach
         // Make those particles dynamic
         setDynamicParticles(ids);
+    }
+}
+
+void Cloth::attachToRigidBodySurfaceWithinRadius(const Eigen::Matrix<Real,1,3> &centerWorld,
+                                                    const Real radius,
+                                                    std::vector<int> &ids,
+                                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                                                    std::unordered_set<int> &sticked_ids,
+                                                    bool is_attach,
+                                                    utilities::CollisionHandler *collisionHandler,
+                                                    Real snapDistanceThreshold)
+{
+    // 1) Gather candidate indices
+    ids.clear();
+    rel_poses.clear();
+
+    for (int i = 0; i < pos_.rows(); ++i)
+    {
+        // skip if already attached and is_attach is true, etc.
+        if (!is_attach && sticked_ids.find(i) == sticked_ids.end())
+            continue;
+        // Distance check
+        Eigen::Matrix<Real,1,3> curPos = pos_.row(i);
+        Real dist = (curPos - centerWorld).norm();
+        if (dist <= radius)
+        {
+            ids.push_back(i);
+            // we'll fill rel_poses after we know the final projected position
+            rel_poses.emplace_back(Eigen::Matrix<Real,1,3>::Zero());
+        }
+    }
+
+    // 2) Depending on attach or detach
+    if (is_attach)
+    {
+        // For each candidate in 'ids', project onto the nearest surface
+        for (size_t k = 0; k < ids.size(); ++k)
+        {
+            int pid = ids[k];
+            Eigen::Matrix<Real,1,3> oldPos = pos_.row(pid);
+
+            utilities::CollisionHandler::NearestSurfaceData proj;
+            bool ok = collisionHandler->projectPointOnRigidBodySurface(oldPos.transpose(), proj);
+            if (ok && proj.distance < snapDistanceThreshold)
+            {
+                // Move cloth particle to that surface
+                pos_.row(pid) = proj.closestPointWorld.transpose();
+
+                // record relative pose if needed:
+                // relPose = (particleWorldPos - centerWorld)
+                rel_poses[k] = pos_.row(pid) - centerWorld;
+
+                // if not already in sticked_ids, add it
+                if (sticked_ids.find(pid) == sticked_ids.end())
+                {
+                    sticked_ids.insert(pid);
+                }
+            }
+            else
+            {
+                // Could not project or too far => optionally skip or do something else
+                // e.g. remove from the final ids so we don't freeze it
+                ids[k] = -1; // mark invalid
+            }
+        }
+
+        // Erase any invalid ones
+        // or rebuild the vectors ignoring indices == -1
+        std::vector<int> valid_ids;
+        std::vector<Eigen::Matrix<Real,1,3>> valid_relposes;
+        for (size_t k=0; k<ids.size(); ++k)
+        {
+            if (ids[k] >= 0)
+            {
+                valid_ids.push_back(ids[k]);
+                valid_relposes.push_back(rel_poses[k]);
+            }
+        }
+        ids = valid_ids;
+        rel_poses = valid_relposes;
+
+        // Finally, freeze them
+        setStaticParticles(ids);
+    }
+    else
+    {
+        // Detach the ones that are currently in 'sticked_ids' and in 'ids'
+        // then set them dynamic
+        std::vector<int> toDetach;
+        for (int pid : ids)
+        {
+            if (sticked_ids.find(pid) != sticked_ids.end())
+            {
+                sticked_ids.erase(pid);
+                toDetach.push_back(pid);
+            }
+        }
+        setDynamicParticles(toDetach);
     }
 }
 

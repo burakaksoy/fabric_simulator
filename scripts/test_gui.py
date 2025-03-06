@@ -1632,84 +1632,84 @@ class TestGUI(qt_widgets.QWidget):
         if self.dual_spacenav_twist:
             self.check_spacenav_twist2_wait_timeout()
         
-        with self.lock:
-            # Handle manual control of each custom static particle and the binded particles
-            for particle in self.combined_particles:
-                # Do not proceed with the particles until the initial position values have been set
-                if not (particle in self.particle_positions):
-                    continue
+        # with self.lock:
+        # Handle manual control of each custom static particle and the binded particles
+        for particle in self.combined_particles:
+            # Do not proceed with the particles until the initial position values have been set
+            if not (particle in self.particle_positions):
+                continue
 
-                if self.buttons_manual[particle].isChecked():
-                    dt = self.get_timestep(particle)   
-                    # dt = 0.01
-                    # dt = 1. / self.pub_rate_odom
+            if self.buttons_manual[particle].isChecked():
+                dt = self.get_timestep(particle)   
+                # dt = 0.01
+                # dt = 1. / self.pub_rate_odom
+                
+                # If second spacenav twist is enabled, use the second spacenav twist for hand_2 particle
+                if self.dual_spacenav_twist and particle == "hand_2":
+                    twist_cmd = self.spacenav_twist2
+                else:
+                    twist_cmd = self.spacenav_twist
+
+                # simple time step integration using Twist data
+                pose = Pose()
+                pose.position.x = self.particle_positions[particle].x + dt*twist_cmd.linear.x
+                pose.position.y = self.particle_positions[particle].y + dt*twist_cmd.linear.y
+                pose.position.z = self.particle_positions[particle].z + dt*twist_cmd.linear.z
+
+                # # --------------------------------------------------------------
+                # # To update the orientation with the twist message
+                pose.orientation = self.particle_orientations[particle]
+
+                if self.is_orientation_control_enabled:           
+                    # Calculate the magnitude of the angular velocity vector
+                    omega_magnitude = math.sqrt(twist_cmd.angular.x**2 + 
+                                                twist_cmd.angular.y**2 + 
+                                                twist_cmd.angular.z**2)
                     
-                    # If second spacenav twist is enabled, use the second spacenav twist for hand_2 particle
-                    if self.dual_spacenav_twist and particle == "hand_2":
-                        twist_cmd = self.spacenav_twist2
-                    else:
-                        twist_cmd = self.spacenav_twist
+                    # print("omega_magnitude: " + str(omega_magnitude))
 
-                    # simple time step integration using Twist data
-                    pose = Pose()
-                    pose.position.x = self.particle_positions[particle].x + dt*twist_cmd.linear.x
-                    pose.position.y = self.particle_positions[particle].y + dt*twist_cmd.linear.y
-                    pose.position.z = self.particle_positions[particle].z + dt*twist_cmd.linear.z
-
-                    # # --------------------------------------------------------------
-                    # # To update the orientation with the twist message
-                    pose.orientation = self.particle_orientations[particle]
-
-                    if self.is_orientation_control_enabled:           
-                        # Calculate the magnitude of the angular velocity vector
-                        omega_magnitude = math.sqrt(twist_cmd.angular.x**2 + 
-                                                    twist_cmd.angular.y**2 + 
-                                                    twist_cmd.angular.z**2)
+                    if omega_magnitude > 1e-9:  # Avoid division by zero
+                        # Create the delta quaternion based on world frame twist
+                        delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
+                            twist_cmd.angular.x / omega_magnitude,
+                            twist_cmd.angular.y / omega_magnitude,
+                            twist_cmd.angular.z / omega_magnitude
+                        ])
                         
-                        # print("omega_magnitude: " + str(omega_magnitude))
+                        # Update the pose's orientation by multiplying delta quaternion with current orientation 
+                        # Note the order here. This applies the world frame rotation directly.
+                        current_quaternion = (
+                            pose.orientation.x,
+                            pose.orientation.y,
+                            pose.orientation.z,
+                            pose.orientation.w
+                        )
+                        
+                        new_quaternion = tf_trans.quaternion_multiply(delta_quat, current_quaternion)
+                        
+                        pose.orientation.x = new_quaternion[0]
+                        pose.orientation.y = new_quaternion[1]
+                        pose.orientation.z = new_quaternion[2]
+                        pose.orientation.w = new_quaternion[3]
+                # # --------------------------------------------------------------
 
-                        if omega_magnitude > 1e-9:  # Avoid division by zero
-                            # Create the delta quaternion based on world frame twist
-                            delta_quat = tf_trans.quaternion_about_axis(omega_magnitude * dt, [
-                                twist_cmd.angular.x / omega_magnitude,
-                                twist_cmd.angular.y / omega_magnitude,
-                                twist_cmd.angular.z / omega_magnitude
-                            ])
-                            
-                            # Update the pose's orientation by multiplying delta quaternion with current orientation 
-                            # Note the order here. This applies the world frame rotation directly.
-                            current_quaternion = (
-                                pose.orientation.x,
-                                pose.orientation.y,
-                                pose.orientation.z,
-                                pose.orientation.w
-                            )
-                            
-                            new_quaternion = tf_trans.quaternion_multiply(delta_quat, current_quaternion)
-                            
-                            pose.orientation.x = new_quaternion[0]
-                            pose.orientation.y = new_quaternion[1]
-                            pose.orientation.z = new_quaternion[2]
-                            pose.orientation.w = new_quaternion[3]
-                    # # --------------------------------------------------------------
+                if particle in self.binded_particles:
+                    self.particle_positions[particle] = pose.position
+                    self.particle_orientations[particle] = pose.orientation
 
-                    if particle in self.binded_particles:
-                        self.particle_positions[particle] = pose.position
-                        self.particle_orientations[particle] = pose.orientation
-
-                    # Prepare Odometry message
-                    odom = Odometry()
-                    odom.header.stamp = rospy.Time.now()
-                    odom.header.frame_id = "map" 
-                    
-                    if particle in self.binded_particles:
-                        odom.child_frame_id = f"{particle}_odom"
-                    if particle in self.custom_static_particles:
-                        odom.child_frame_id = f"particle_{particle}_odom"
-                    
-                    odom.pose.pose = pose
-                    odom.twist.twist = twist_cmd
-                    self.odom_publishers[particle].publish(odom)
+                # Prepare Odometry message
+                odom = Odometry()
+                odom.header.stamp = rospy.Time.now()
+                odom.header.frame_id = "map" 
+                
+                if particle in self.binded_particles:
+                    odom.child_frame_id = f"{particle}_odom"
+                if particle in self.custom_static_particles:
+                    odom.child_frame_id = f"particle_{particle}_odom"
+                
+                odom.pose.pose = pose
+                odom.twist.twist = twist_cmd
+                self.odom_publishers[particle].publish(odom)
 
     def change_dynamicity_cb(self,particle, is_dynamic):
         msg = ChangeParticleDynamicity()
@@ -1742,23 +1742,23 @@ class TestGUI(qt_widgets.QWidget):
             rospy.loginfo_throttle(2.0,"spacenav_twist2 is zeroed because it's been long time since the last msg arrived..")
 
     def state_array_callback(self, states_msg):
-        with self.lock:
-            # for particle in self.custom_static_particles:
-            #     # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
-            #         self.particle_positions[particle] = states_msg.states[particle].pose.position
-            #         self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
-            #         self.particle_twists[particle] = states_msg.states[particle].twist
-            
-            # Convert to a set for faster membership checks
-            custom_particle_ids = set(self.custom_static_particles)
+        # with self.lock:
+        # for particle in self.custom_static_particles:
+        #     # if not self.buttons_manual[particle].isChecked(): # Needed To prevent conflicts in pose updates when applying manual control
+        #         self.particle_positions[particle] = states_msg.states[particle].pose.position
+        #         self.particle_orientations[particle] = states_msg.states[particle].pose.orientation
+        #         self.particle_twists[particle] = states_msg.states[particle].twist
+        
+        # Convert to a set for faster membership checks
+        custom_particle_ids = set(self.custom_static_particles)
 
-            for segment_state in states_msg.states:
-                seg_id = segment_state.id
-                # Only update if this ID is in the custom_static_particles
-                if seg_id in custom_particle_ids:
-                    self.particle_positions[seg_id] = segment_state.pose.position
-                    self.particle_orientations[seg_id] = segment_state.pose.orientation
-                    self.particle_twists[seg_id] = segment_state.twist
+        for segment_state in states_msg.states:
+            seg_id = segment_state.id
+            # Only update if this ID is in the custom_static_particles
+            if seg_id in custom_particle_ids:
+                self.particle_positions[seg_id] = segment_state.pose.position
+                self.particle_orientations[seg_id] = segment_state.pose.orientation
+                self.particle_twists[seg_id] = segment_state.twist
 
 
     def initialize_binded_particle_positions(self):

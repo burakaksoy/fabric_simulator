@@ -111,7 +111,8 @@ min_dist_to_rb_pub_rate: 50.0 # Hz, frequency to publish minimum distances to th
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnSphere.json
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnRollers.json
 # rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnBunny.json
-rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrelReal.json 
+# rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrelReal.json 
+rb_scene_config_path: $(find fabric_simulator)/config/scenes/ClothOnMandrelReal-no-ceiling.json 
 
 is_dependant_simulator: false # (default: false) if true, the simulator subscribes to a topic to get the particle dynamicity change updates to synchronize with the main simulator, otherwise the simulator publishes the particle dynamicity change updates to a topic for other simulators to synchronize. The changes are transferred via a custom synchronization topic.
 

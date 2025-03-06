@@ -1027,20 +1027,34 @@ bool FabricSimulator::fixNearestFabricParticleCommon(bool is_fix, const geometry
                                 pose.pose.position.y, 
                                 pose.pose.position.z);
 
-    // Convert orientation (if needed).
-    Eigen::Quaternion<Real> ori(pose.pose.orientation.w, 
-                                pose.pose.orientation.x, 
-                                pose.pose.orientation.y, 
-                                pose.pose.orientation.z);
-    ori.normalize();
+    // // Convert orientation (if needed).
+    // Eigen::Quaternion<Real> ori(pose.pose.orientation.w, 
+    //                             pose.pose.orientation.x, 
+    //                             pose.pose.orientation.y, 
+    //                             pose.pose.orientation.z);
+    // ori.normalize();
 
     // Tell simulation (fabric) to fix/unfix the nearest particles within a radius.
     std::vector<int> affected_ids;
     std::vector<Eigen::Matrix<Real,1,3>> affected_rel_poses;
-    fabric_.attachWithinRadius(pos, robot_attach_radius_, 
-                                    affected_ids, affected_rel_poses,
-                                    sticked_ids_,
-                                    is_fix);
+
+    // fabric_.attachWithinRadius(pos, robot_attach_radius_, 
+    //                                 affected_ids, affected_rel_poses,
+    //                                 sticked_ids_,
+    //                                 is_fix);
+
+    // Choose any threshold for how far a projected point can be from the original
+    // in order to consider it "attachable". E.g. 0.02 m or the 
+    Real snapDist = (1.0/fabric_resolution_)*0.99; // One grid cell less than 1.0
+
+    fabric_.attachToRigidBodySurfaceWithinRadius(pos,
+                                                robot_attach_radius_,
+                                                affected_ids,
+                                                affected_rel_poses,
+                                                sticked_ids_,
+                                                is_fix,
+                                                collision_handler_, // pass pointer
+                                                snapDist);
 
     // Log the results.
     ROS_INFO("FabricSimulator::fixNearestFabricParticleCommon: radius: %f, "

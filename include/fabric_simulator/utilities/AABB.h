@@ -1,7 +1,7 @@
 #ifndef __AABB_H__
 #define __AABB_H__
 
-#include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/Common.h"
 
 #define FORCE_INLINE __attribute__((always_inline))
 

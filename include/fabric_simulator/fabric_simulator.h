@@ -56,6 +56,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "fabric_simulator/Common.h"
 #include "fabric_simulator/utilities/cloth.h"
 #include "fabric_simulator/utilities/rigid_body_scene_loader.h"
 #include "fabric_simulator/utilities/collision_handler.h"

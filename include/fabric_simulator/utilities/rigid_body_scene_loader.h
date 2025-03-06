@@ -4,7 +4,7 @@
 #include <string>
 #include "extern/json/json.hpp"
 
-#include "fabric_simulator/utilities/cloth.h"
+#include "fabric_simulator/Common.h"
 #include "Discregrid/All"
 
 namespace utilities

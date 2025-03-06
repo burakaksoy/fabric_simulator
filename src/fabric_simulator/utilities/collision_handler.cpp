@@ -4,6 +4,7 @@
  */
 
 #include "fabric_simulator/utilities/collision_handler.h"
+#include "fabric_simulator/utilities/cloth.h"
 // #include <ros/ros.h> // Added for debug timing
 
 using namespace utilities;
@@ -573,6 +574,63 @@ void CollisionHandler::computeMinDistanceRBSolid(pbd_object::Cloth &fabric_,
 
     // Perform the depth-first traversal
     bvh.traverse_depth_first(predicate, callback);
+}
+
+bool CollisionHandler::projectPointOnRigidBodySurface(const Eigen::Matrix<Real, 3, 1> &pointWorld,
+														NearestSurfaceData &nearestData)
+{
+    nearestData.found = false;
+    nearestData.distance = std::numeric_limits<Real>::max();
+
+    // Loop over all collision objects, but only consider the rigid-body ones
+    for (auto &co : m_collisionObjects)
+    {
+        if (co->m_bodyType != CollisionObject::RigidBodyCollisionObjectType)
+            continue;
+        
+        // Retrieve the rigid-body data
+        RigidBodySceneLoader::RigidBodyData &rb = rigid_bodies_[co->m_bodyIndex];
+
+        // Transform the query point into the RB’s local frame
+        // RB’s COM is at rb.m_x, rotation is rb.m_q, scale is co->m_scale, etc.
+        const Eigen::Matrix<Real, 3, 3> R = rb.m_q.normalized().toRotationMatrix();
+        const Eigen::Matrix<Real, 3, 1> comWorld = rb.m_x.transpose();
+        Eigen::Matrix<Real, 3, 1> xLocal = R.transpose() * (pointWorld - comWorld);
+        
+        // Apply scale
+        Eigen::Matrix<Real, 3, 1> xScaled = xLocal.cwiseProduct(co->m_scale.cwiseInverse());
+
+        // Interpolate SDF in local coords
+        Eigen::Vector3d grad;
+        double d_scaled = co->m_sdf->interpolate(0, xScaled.template cast<double>(), &grad);
+
+        if (d_scaled == std::numeric_limits<double>::max())
+            continue; // no valid SDF in that region
+
+        // Invert normal if needed
+        grad = co->m_invertSDF * grad;
+        if (grad.squaredNorm() > 1.0e-6)
+            grad.normalize();
+
+        // The local closest point on the scaled surface
+        Eigen::Vector3d cp_scaled = xScaled.template cast<double>() - d_scaled * grad;
+        // Convert back out of scale and local frame
+        Eigen::Matrix<Real, 3, 1> cpLocal = cp_scaled.template cast<Real>().cwiseProduct(co->m_scale);
+        Eigen::Matrix<Real, 3, 1> cpWorld = R * cpLocal + comWorld;
+
+        // Dist in world
+        Real distWorld = (pointWorld - cpWorld).norm();
+        if (distWorld < nearestData.distance)
+        {
+            nearestData.found = true;
+            nearestData.distance = distWorld;
+            nearestData.closestPointWorld = cpWorld;
+            nearestData.normalWorld = (R * grad.cast<Real>());
+            nearestData.rigidBodyIndex = co->m_bodyIndex;
+        }
+    }
+
+    return nearestData.found;
 }
 
 /////////////////////////////////////////////////////////////////////////
