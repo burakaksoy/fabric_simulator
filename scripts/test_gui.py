@@ -215,6 +215,14 @@ class TestGUI(qt_widgets.QWidget):
             "set left position": self.set_left_position_button_click,
             
             "set right position": self.set_right_position_button_click,
+            
+            "enable layup mode": self.enable_layup_mode_button_click,
+            
+            "disable layup mode": self.disable_layup_mode_button_click,
+            
+            "switch to layup mode": self.switch_to_layup_mode,
+            
+            "switch to follower mode": self.switch_to_follower_mode,
             # Add more voice commands here ..
         }
 
@@ -283,6 +291,7 @@ class TestGUI(qt_widgets.QWidget):
         self.set_nominal_control_enabled_service_name = controller_node_name + "/set_nominal_control_enabled"
         self.set_obstacle_avoidance_enabled_service_name = controller_node_name + "/set_obstacle_avoidance_enabled"
         self.set_stress_avoidance_enabled_service_name = controller_node_name + "/set_stress_avoidance_enabled"
+        self.set_layup_mode_enabled_service_name = controller_node_name + "/set_layup_application_mode_enabled"
         self.reset_target_poses_wrt_leader_service_name = controller_node_name + "/reset_target_poses_wrt_leader"
 
         # Wait for services to be available
@@ -292,6 +301,7 @@ class TestGUI(qt_widgets.QWidget):
         rospy.wait_for_service(self.set_nominal_control_enabled_service_name)
         rospy.wait_for_service(self.set_obstacle_avoidance_enabled_service_name)
         rospy.wait_for_service(self.set_stress_avoidance_enabled_service_name)
+        rospy.wait_for_service(self.set_layup_mode_enabled_service_name)
         rospy.wait_for_service(self.reset_target_poses_wrt_leader_service_name)
         print("Controller Services are available.")
 
@@ -300,6 +310,7 @@ class TestGUI(qt_widgets.QWidget):
         self.set_nominal_control_enabled_service_client = rospy.ServiceProxy(self.set_nominal_control_enabled_service_name, SetBool)
         self.set_obstacle_avoidance_enabled_service_client = rospy.ServiceProxy(self.set_obstacle_avoidance_enabled_service_name, SetBool)
         self.set_stress_avoidance_enabled_service_client = rospy.ServiceProxy(self.set_stress_avoidance_enabled_service_name, SetBool)
+        self.set_layup_mode_enabled_service_client = rospy.ServiceProxy(self.set_layup_mode_enabled_service_name, SetBool)
         self.reset_target_poses_wrt_leader_service_client = rospy.ServiceProxy(self.reset_target_poses_wrt_leader_service_name, Empty)
 
         # Publishers
@@ -715,7 +726,24 @@ class TestGUI(qt_widgets.QWidget):
         # -------------------------------------------------------------
         
         # -------------------------------------------------------------
-        # Column 5: Pause/Resume Controller
+        # Column 5: Enable/Disable Layup Mode
+        layup_mode_layout = qt_widgets.QVBoxLayout()
+        self.layup_mode_enable_button = qt_widgets.QPushButton("Enable Layup Mode")
+        self.layup_mode_enable_button.clicked.connect(lambda _, is_enabled=True: self.layup_mode_toggle_cb(is_enabled))
+        layup_mode_layout.addWidget(self.layup_mode_enable_button)
+        
+        self.layup_mode_disable_button = qt_widgets.QPushButton("Disable Layup Mode")
+        self.layup_mode_disable_button.clicked.connect(lambda _, is_enabled=False: self.layup_mode_toggle_cb(is_enabled))
+        layup_mode_layout.addWidget(self.layup_mode_disable_button)
+        
+        # Add the column 5 to the main layout
+        main_layout.addLayout(layup_mode_layout)
+        # Add vertical line separator that spans the height of both columns
+        self.add_vertical_line_to_layout(main_layout)
+        # -------------------------------------------------------------
+        
+        # -------------------------------------------------------------
+        # Column 6: Pause/Resume Controller
         pause_controller_layout = qt_widgets.QVBoxLayout()
         self.pause_controller_button = qt_widgets.QPushButton("Pause Controller")
         self.pause_controller_button.clicked.connect(lambda _, is_paused=True: self.pause_controller_toggle_cb(is_paused))
@@ -725,7 +753,7 @@ class TestGUI(qt_widgets.QWidget):
         self.resume_controller_button.clicked.connect(lambda _, is_paused=False: self.pause_controller_toggle_cb(is_paused))
         pause_controller_layout.addWidget(self.resume_controller_button)
         
-        # Add the column 5 to the main layout
+        # Add the column 6 to the main layout
         main_layout.addLayout(pause_controller_layout)
         # -------------------------------------------------------------
         
@@ -838,6 +866,17 @@ class TestGUI(qt_widgets.QWidget):
                 rospy.logerr("Failed to enable/disable stress avoidance.")
         except rospy.ServiceException as e:
             rospy.logerr("Service call to set_stress_avoidance_enabled failed: %s", e)
+
+    def layup_mode_toggle_cb(self, is_enabled):
+        try:
+            # Call the set_nominal_control_enabled service
+            response = self.set_layup_mode_enabled_service_client(is_enabled)
+            if response.success:
+                rospy.loginfo("Layup Mode enabled/disabled successfully.")
+            else:
+                rospy.logerr("Failed to enable/disable Layup Mode.")
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to set_nominal_control_enabled failed: %s", e)
 
     def pause_controller_toggle_cb(self, is_paused):
         try:
@@ -955,7 +994,20 @@ class TestGUI(qt_widgets.QWidget):
         
     def set_right_position_button_click(self):
         self.set_position_cb_basic("hand_1")
+        
+    def enable_layup_mode_button_click(self):
+        self.layup_mode_enable_button.click()
+        
+    def disable_layup_mode_button_click(self):
+        self.layup_mode_disable_button.click()
 
+    def switch_to_layup_mode(self):
+        self.obstacle_avoidance_disable_button.click()
+        self.layup_mode_enable_button.click()
+        
+    def switch_to_follower_mode(self):
+        self.obstacle_avoidance_enable_button.click()
+        self.layup_mode_disable_button.click()
 
     # Slot that is called whenever we get recognized text
     def handle_voice_command(self, recognized_text):
