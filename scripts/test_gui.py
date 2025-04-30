@@ -217,10 +217,16 @@ class TestGUI(qt_widgets.QWidget):
             "set right position": self.set_right_position_button_click,
             
             "enable layup mode": self.enable_layup_mode_button_click,
+            "enable lay up mode": self.enable_layup_mode_button_click,
+            "enable layout mode": self.enable_layup_mode_button_click,
             
             "disable layup mode": self.disable_layup_mode_button_click,
+            "disable lay up mode": self.disable_layup_mode_button_click,
+            "disable layout mode": self.disable_layup_mode_button_click,
             
             "switch to layup mode": self.switch_to_layup_mode,
+            "switch to lay up mode": self.switch_to_layup_mode,
+            "switch to layout mode": self.switch_to_layup_mode,
             
             "switch to follower mode": self.switch_to_follower_mode,
             # Add more voice commands here ..

@@ -188,7 +188,8 @@ private:
 
     void updateCustomStaticParticles_(const int& particle_id, const bool& is_dynamic);
     void updateCustomStaticParticlesOdomAndCmdVelSubscibers_(const int& particle_id, const bool& is_dynamic,
-                                                            std::string& odom_topic, std::string& cmd_vel_topic);
+                                                            std::string& odom_topic, std::string& cmd_vel_topic,
+                                                            std::vector<std::function<void()>>& cleanup);
 
     void fixNearestFabricParticleRequestCb(const fabric_simulator::FixNearestFabricParticleRequest::ConstPtr& fix_nearest_fabric_particle_request_msg);
     bool fixNearestFabricParticleCommon(bool is_fix, const geometry_msgs::PoseStamped &pose);

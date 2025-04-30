@@ -851,6 +851,10 @@ bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dy
                                                     const Eigen::Matrix<Real,1,3>* pos,
                                                     std::string odom_topic, std::string cmd_vel_topic) 
 {
+    // We'll collect any shutdown calls here
+    std::vector<std::function<void()>> cleanup;
+
+    {
     // Lock to prevent collisions with the simulation.
     boost::recursive_mutex::scoped_lock lock(mtx_);    
 
@@ -888,7 +892,7 @@ bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dy
     updateCustomStaticParticles_(particle_id, is_dynamic);
 
     // Manage odom and cmd_vel subscribers
-    updateCustomStaticParticlesOdomAndCmdVelSubscibers_(particle_id, is_dynamic, odom_topic, cmd_vel_topic);
+    updateCustomStaticParticlesOdomAndCmdVelSubscibers_(particle_id, is_dynamic, odom_topic, cmd_vel_topic, cleanup);
 
     // Add the fully resolved topic names to the sync message
     particle_update_data.odom_topic = odom_topic;
@@ -904,6 +908,11 @@ bool FabricSimulator::updateParticleDynamicityCommon(int particle_id, bool is_dy
         pub_sync_particle_updates_.publish(sync_particle_update_msg);
         ROS_INFO("Published SyncParticleUpdateDataArray message");
     }
+
+    } // <-- End of lock scope
+
+    // Finally run all deferred shutdowns
+    for (auto &fn : cleanup) fn();
 
     // If everything went smoothly, return success
     return true;
@@ -930,22 +939,30 @@ void FabricSimulator::updateCustomStaticParticles_(const int& particle_id, const
 }
 
 void FabricSimulator::updateCustomStaticParticlesOdomAndCmdVelSubscibers_(const int& particle_id, const bool& is_dynamic,
-    std::string& odom_topic, std::string& cmd_vel_topic)
+    std::string& odom_topic, std::string& cmd_vel_topic, std::vector<std::function<void()>>& cleanup)
 {
     auto sub_iter = custom_static_particles_odom_subscribers_.find(particle_id);
     auto sub_iter_cmd_vel = custom_static_particles_cmd_vel_subscribers_.find(particle_id);
 
     if (is_dynamic) {
         if (sub_iter != custom_static_particles_odom_subscribers_.end()) {
-            sub_iter->second.shutdown();
+            // sub_iter->second.shutdown();
+            auto sub = sub_iter->second;
+            cleanup.push_back([sub]() mutable { sub.shutdown(); });
+
             custom_static_particles_odom_subscribers_.erase(sub_iter);
+
             ROS_INFO("Odom Subscriber for particle %d shut down", particle_id);
         } else {
             ROS_INFO("No odom subscriber found for particle %d", particle_id);
         }
         if (sub_iter_cmd_vel != custom_static_particles_cmd_vel_subscribers_.end()) {
-            sub_iter_cmd_vel->second.shutdown();
+            // sub_iter_cmd_vel->second.shutdown();
+            auto sub_cmd_vel = sub_iter_cmd_vel->second;
+            cleanup.push_back([sub_cmd_vel]() mutable { sub_cmd_vel.shutdown(); });
+
             custom_static_particles_cmd_vel_subscribers_.erase(sub_iter_cmd_vel);
+            
             ROS_INFO("Vel Subscriber for particle %d shut down", particle_id);
         } else {
             ROS_INFO("No cmd_vel subscriber found for particle %d", particle_id);
@@ -1120,6 +1137,9 @@ bool FabricSimulator::attachExternalOdomFrameCallback(fabric_simulator::AttachEx
 
 bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_topic, bool is_attach)
 {
+    std::vector<std::function<void()>> cleanup;
+    
+    {
     // Lock to prevent collisions with the simulation.
     boost::recursive_mutex::scoped_lock lock(mtx_);
 
@@ -1202,13 +1222,22 @@ bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_top
                 ROS_INFO("Published SyncParticleUpdateDataArray message for detachExternalOdomFrame");
             }
 
-            // Do the internal cleanup:
-            // Mark it not attached:
-            it->second.is_attached = false;
-            // it->second.attached_ids.clear();
-            // and remove from map entirely:
-            it->second.odom_sub.shutdown();
-            it->second.wrench_pub.shutdown();
+            // // Do the internal cleanup:
+            // // Mark it not attached:
+            // it->second.is_attached = false;
+            // // it->second.attached_ids.clear();
+            // // and remove from map entirely:
+            // it->second.odom_sub.shutdown();
+            // it->second.wrench_pub.shutdown();
+
+            // queue up the subscriber & publisher for shutdown
+            {
+                auto sub = it->second.odom_sub;
+                auto pub = it->second.wrench_pub;
+                cleanup.push_back([sub]() mutable { sub.shutdown(); });
+                cleanup.push_back([pub]() mutable { pub.shutdown(); });
+            }
+
             // Actually remove from map
             external_odom_attachments_.erase(it);
         }
@@ -1217,17 +1246,26 @@ bool FabricSimulator::attachExternalOdomFrameCommon(const std::string & odom_top
             ROS_INFO_STREAM("No external_odom_attachment found for topic '" << odom_topic << "' to detach.");
         }
     }
+
+    } // <-- lock released here
+
+    // now that the lock is released, safely shut down ROS handles
+    for (auto& fn : cleanup) fn();
     
     return true;
 }
 
 void FabricSimulator::syncParticleUpdateDataArrayCb(const fabric_simulator::SyncParticleUpdateDataArray::ConstPtr& msg)
 {
-    // Lock to prevent collisions with the simulation.
-    boost::recursive_mutex::scoped_lock lock(mtx_);
-
     // Store a list of newly created odom topics that need subscription (needed for ATTACH_EXTERNAL_ODOM_FRAME case)
     std::vector<std::string> newly_created_odom_topics;
+
+    // We'll accumulate topics to shutdown calls here:
+    std::vector<std::function<void()>> cleanup;
+
+    {
+    // Lock to prevent collisions with the simulation.
+    boost::recursive_mutex::scoped_lock lock(mtx_);
 
     // Iterate through the array of SyncParticleUpdateData
     for (const auto& data : msg->data) {
@@ -1312,13 +1350,22 @@ void FabricSimulator::syncParticleUpdateDataArrayCb(const fabric_simulator::Sync
                         // Make its particles dynamic
                         fabric_.setDynamicParticles(external_odom_attachment.attached_ids);
                         
-                        // Do the internal cleanup:
-                        // Mark it not attached:
-                        external_odom_attachment.is_attached = false;
-                        // external_odom_attachment.attached_ids.clear();
-                        // and remove from map entirely:
-                        external_odom_attachment.odom_sub.shutdown();
-                        external_odom_attachment.wrench_pub.shutdown();
+                        // // Do the internal cleanup:
+                        // // Mark it not attached:
+                        // external_odom_attachment.is_attached = false;
+                        // // external_odom_attachment.attached_ids.clear();
+                        // // and remove from map entirely:
+                        // external_odom_attachment.odom_sub.shutdown();
+                        // external_odom_attachment.wrench_pub.shutdown();
+
+                        // queue up the subscriber & publisher for shutdown
+                        {
+                            auto sub = external_odom_attachment.odom_sub;
+                            auto pub = external_odom_attachment.wrench_pub;
+                            cleanup.push_back([sub]() mutable { sub.shutdown(); });
+                            cleanup.push_back([pub]() mutable { pub.shutdown(); });
+                        }
+                        
                         // Actually remove from map
                         external_odom_attachments_.erase(it);
                         ROS_INFO_STREAM("Detached external_odom_attachment with topic: " << data.odom_topic);
@@ -1366,6 +1413,12 @@ void FabricSimulator::syncParticleUpdateDataArrayCb(const fabric_simulator::Sync
             external_odom_attachment.wrench_pub = nh_.advertise<geometry_msgs::WrenchStamped>(wrench_topic_name, 1);
         }
     }
+
+    } // <-- lock released here
+
+    // Finally, run all deferred shutdowns
+    for (auto &fn : cleanup) fn();
+
 }
 
 void FabricSimulator::changeStretchingComplianceCb(const std_msgs::Float32::ConstPtr& msg){
