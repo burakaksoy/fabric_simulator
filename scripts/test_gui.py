@@ -1020,6 +1020,7 @@ class TestGUI(qt_widgets.QWidget):
         # See if recognized_text matches a known command
         if recognized_text in self.voice_command_actions:
             rospy.loginfo(f"Executing command: {recognized_text}")
+            print(f"Executing command: {recognized_text}")
             
             # Call the associated action
             self.voice_command_actions[recognized_text]()
@@ -1027,16 +1028,19 @@ class TestGUI(qt_widgets.QWidget):
             # Provide audible feedback
             # self.say_text(f"I heard {recognized_text}.")
             # self.say_text(f"{recognized_text}.")
-            filename="/usr/share/sounds/Yaru/stereo/complete.oga"
-            os.system(f"ffplay -nodisp -autoexit {filename}")
+            # filename="/usr/share/sounds/Yaru/stereo/complete.oga"
+            filename="/usr/share/sounds/sound-icons/percussion-12.wav"
+            os.system(f"ffplay -nodisp -autoexit {filename} > /dev/null 2>&1")
             
         else:
             rospy.logwarn(f"No matching command for: {recognized_text}")
+            print(f"No matching command for: {recognized_text}")
             
             # Provide audible feedback
             # self.say_text(f"I did not understand.")
-            filename="/usr/share/sounds/Yaru/stereo/dialog-error.oga"
-            os.system(f"ffplay -nodisp -autoexit {filename}")
+            # filename="/usr/share/sounds/Yaru/stereo/dialog-error.oga"
+            filename="/usr/share/sounds/sound-icons/percussion-10.wav"
+            os.system(f"ffplay -nodisp -autoexit {filename} > /dev/null 2>&1")
 
     def say_text(self, text):
         if self.voice_offline_mode:
@@ -1056,10 +1060,11 @@ class TestGUI(qt_widgets.QWidget):
             # os.system(f"start {filename}")  # Windows
             # os.system(f"afplay {filename}")  # macOS
             # os.system(f"mpg321 {filename}")  # Linux
-            os.system(f"ffplay -nodisp -autoexit {filename}")
+            os.system(f"ffplay -nodisp -autoexit {filename} > /dev/null 2>&1")
 
         except Exception as e:
             rospy.logerr(f"Error in text-to-speech: {e}")
+            print(f"Error in text-to-speech: {e}")
     # -------------------------------------------------------------------------------------
 
     def format_number(self,num, digits=4):
