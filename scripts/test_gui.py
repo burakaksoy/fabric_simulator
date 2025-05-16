@@ -194,28 +194,81 @@ class TestGUI(qt_widgets.QWidget):
             
             "attach left hand": self.attach_left_hand_button_click,
             "attached left hand": self.attach_left_hand_button_click,
+            "attach the left hand": self.attach_left_hand_button_click,
+            # Wierdly, google TTS recognizes these when saying "attach left hand commands"
+            "attach left": self.attach_left_hand_button_click,
+            "attached left": self.attach_left_hand_button_click,
+            "text dad": self.attach_left_hand_button_click,
+            "a text left": self.attach_left_hand_button_click,
+            "attachment": self.attach_left_hand_button_click,
+            "attach the last time": self.attach_left_hand_button_click,
             
             "detach left hand": self.detach_left_hand_button_click,
             "detached left hand": self.detach_left_hand_button_click,
+            "detach left": self.detach_left_hand_button_click,
+            "detached left": self.detach_left_hand_button_click,
+            "the touch left hand": self.detach_left_hand_button_click,
+            "touch left hand": self.detach_left_hand_button_click,
+            "detached last time": self.detach_left_hand_button_click,
+            "you touch left hand": self.detach_left_hand_button_click,
+            
             
             "attach right hand": self.attach_right_hand_button_click,
+            "attach the right hand": self.attach_right_hand_button_click,
             "attached right hand": self.attach_right_hand_button_click,
+            # Wierdly, google TTS recognizes these when saying "attach right hand commands"
+            "attach right": self.attach_right_hand_button_click,
+            "attached right": self.attach_right_hand_button_click,
+            "that's right": self.attach_right_hand_button_click, 
+            "that's right hand": self.attach_right_hand_button_click, 
+            "you're right": self.attach_right_hand_button_click,
+            "attach that": self.attach_right_hand_button_click,
+            "i text the right hand": self.attach_right_hand_button_click,
+            "attached to write 10": self.attach_right_hand_button_click,
+            "at that right hand": self.attach_right_hand_button_click,
+            "i text right hand": self.attach_right_hand_button_click,
+            "i text right hand": self.attach_right_hand_button_click,
+            
             
             "detach right hand": self.detach_right_hand_button_click,
             "detached right hand": self.detach_right_hand_button_click,
+            "detach right": self.detach_right_hand_button_click,
+            "detect right": self.detach_right_hand_button_click,
+            "detect right hand": self.detach_right_hand_button_click,
+            "detects right": self.detach_right_hand_button_click,
+            "detects right hand": self.detach_right_hand_button_click,
+            "detector i-10": self.detach_right_hand_button_click,
+            "it takes right hand": self.detach_right_hand_button_click,
+            
             
             "stick left": self.stick_left_button_click,
+            "stick": self.stick_left_button_click,
+            "skip that": self.stick_left_button_click,
+            "stick that": self.stick_left_button_click,
+            "speak loud": self.stick_left_button_click,
+            "stickler": self.stick_left_button_click,
+            
             
             "unstick left": self.unstick_left_button_click,
             
             "stick right": self.stick_right_button_click,
+            "skip track": self.stick_right_button_click,
+            "speak right": self.stick_right_button_click,
+            "sleep right": self.stick_right_button_click,
+            "sit right": self.stick_right_button_click,
+            
             "unstick right": self.unstick_right_button_click,
             
             "get left corner position": self.get_left_corner_pose_from_particle,
+            "get left position": self.get_left_corner_pose_from_particle,
+            "get right position": self.get_left_corner_pose_from_particle,
             
             "get right corner position": self.get_right_corner_pose_from_particle,
             
             "set left position": self.set_left_position_button_click,
+            "set alarm": self.set_left_position_button_click,
+            "set deck position": self.set_left_position_button_click,
+            
             
             "set right position": self.set_right_position_button_click,
             
@@ -230,6 +283,18 @@ class TestGUI(qt_widgets.QWidget):
             "switch to layup mode": self.switch_to_layup_mode,
             "switch to lay up mode": self.switch_to_layup_mode,
             "switch to layout mode": self.switch_to_layup_mode,
+            "switch to play a song": self.switch_to_layup_mode,
+            "switch play album": self.switch_to_layup_mode,
+            "switch player": self.switch_to_layup_mode,
+            "switch player on": self.switch_to_layup_mode,
+            "switch light on": self.switch_to_layup_mode,
+            "switch the light on": self.switch_to_layup_mode,
+            "switch to lamp": self.switch_to_layup_mode,
+            "switch to lamp on": self.switch_to_layup_mode,
+            "switch to my iphone": self.switch_to_layup_mode,
+            "switch to the apple": self.switch_to_layup_mode,
+            
+            
             
             "switch to follower mode": self.switch_to_follower_mode,
             # Add more voice commands here ..
