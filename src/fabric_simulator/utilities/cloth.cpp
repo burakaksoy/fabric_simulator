@@ -654,41 +654,98 @@ void Cloth::attachNearestWithRadius(const Eigen::Matrix<Real,1,3> &pos, const Re
     }
 }
 
-void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
-                                    std::vector<int> &ids,
-                                    std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
-                                    bool is_attach){
-    // Attaches the particles that is inside a sphere defined with radius r parallel with center pos
-    // Edits:
-    // std::vector<int> ids;
-    // std::vector<Eigen::Matrix<Real,1,3>> rel_poses; 
+// void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
+//                                     std::vector<int> &ids,
+//                                     std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+//                                     bool is_attach){
+//     // Attaches the particles that is inside a sphere defined with radius r parallel with center pos
+//     // Edits:
+//     // std::vector<int> ids;
+//     // std::vector<Eigen::Matrix<Real,1,3>> rel_poses; 
 
-    // if (r <= 0), Only attach the nearest to given pose
-    if (r > 0){ // Attach all within the specified circle
-        // Find all the ids within the radius around the given pos and their relative poses
-        // findPositionVectorsAndIdsInSphere(pos_, r, ids, rel_poses);
-        for (int i = 0; i < pos_.rows(); i++) {
-            Eigen::Matrix<Real,1,3> currentPos = pos_.row(i).transpose();
-            Eigen::Matrix<Real,1,3> relPos = (currentPos - pos); 
-            Real currentDistance = relPos.norm();
-            if (currentDistance < r) {
-                // Only add the particle if it is not already in the list
-                if (std::find(ids.begin(), ids.end(), i) == ids.end()) {
-                    ids.push_back(i);
-                    rel_poses.push_back(relPos);
+//     // if (r <= 0), Only attach the nearest to given pose
+//     if (r > 0){ // Attach all within the specified circle
+//         // Find all the ids within the radius around the given pos and their relative poses
+//         // findPositionVectorsAndIdsInSphere(pos_, r, ids, rel_poses);
+//         for (int i = 0; i < pos_.rows(); i++) {
+//             Eigen::Matrix<Real,1,3> currentPos = pos_.row(i).transpose();
+//             Eigen::Matrix<Real,1,3> relPos = (currentPos - pos); 
+//             Real currentDistance = relPos.norm();
+//             if (currentDistance < r) {
+//                 // Only add the particle if it is not already in the list
+//                 if (std::find(ids.begin(), ids.end(), i) == ids.end()) {
+//                     ids.push_back(i);
+//                     rel_poses.push_back(relPos);
+//                 }
+//             }
+//         }
+//     }
+
+//     if (is_attach){
+//         // Make those particles stationary
+//         setStaticParticles(ids);
+//     }
+//     else{
+//         // Make those particles dynamic
+//         setDynamicParticles(ids);
+//     }
+// }
+
+void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos,
+                               const Real &r,
+                               std::vector<int> &ids,
+                               std::vector<Eigen::Matrix<Real,1,3>> &rel_poses,
+                               bool is_attach)
+{
+    bool nearest_only = false;
+
+    ids.clear();
+    rel_poses.clear();
+
+    int  best_id   = -1;
+    Real best_dist = std::numeric_limits<Real>::max();
+    Eigen::Matrix<Real,1,3> best_rel = Eigen::Matrix<Real,1,3>::Zero();
+
+    const Real r2 = r*r;          // save a sqrt
+
+    for (int i = 0; i < pos_.rows(); ++i)
+    {
+        // ---- keep everything as 1×3 row vectors ----
+        Eigen::Matrix<Real,1,3> cur  = pos_.row(i);   // 1×3
+        Eigen::Matrix<Real,1,3> rel  = cur - pos;     // 1×3  (OK)
+        Real dist2 = rel.squaredNorm();
+
+        // inside sphere ?  (if r<=0 => accept every particle, we'll filter later)
+        if (r <= Real(0) || dist2 < r2)
+        {
+            if (nearest_only)
+            {
+                if (dist2 < best_dist)
+                {
+                    best_dist = dist2;
+                    best_id   = i;
+                    best_rel  = rel;
                 }
+            }
+            else
+            {
+                ids.push_back(i);
+                rel_poses.push_back(rel);
             }
         }
     }
 
-    if (is_attach){
-        // Make those particles stationary
+    if (nearest_only && best_id != -1)
+    {
+        ids.push_back(best_id);
+        rel_poses.push_back(best_rel);
+    }
+
+    // ------------------------------------------------
+    if (is_attach)
         setStaticParticles(ids);
-    }
-    else{
-        // Make those particles dynamic
+    else
         setDynamicParticles(ids);
-    }
 }
 
 void Cloth::attachWithinRadius(const Eigen::Matrix<Real,1,3> &pos, const Real &r, 
