@@ -2138,9 +2138,10 @@ void FabricSimulator::odometryCb_external(const nav_msgs::Odometry::ConstPtr& od
                 pub_sync_particle_updates_.publish(sync_particle_update_msg);
                 ROS_INFO("Published sync particle update message for external odometry attachment.");
             }
+            
+            external_odom_attachment.is_attached = true;
         }
 
-        external_odom_attachment.is_attached = true;
     }
     else
     {

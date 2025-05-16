@@ -115,6 +115,8 @@ class TestGUI(qt_widgets.QWidget):
         self.custom_static_particles = list(set(self.custom_static_particles)) 
         self.binded_particles = list(set(self.binded_particles)) 
         
+        self.subscribe_to_odom_hands = rospy.get_param("~subscribe_to_odom_hands", False)
+        
         # Sorting the list of particles in ascending order
         self.custom_static_particles.sort()
         self.binded_particles.sort()
@@ -122,6 +124,7 @@ class TestGUI(qt_widgets.QWidget):
         self.combined_particles = self.binded_particles + self.custom_static_particles
 
         self.odom_publishers = {}
+        self.odom_subscribers = {}
 
         self.particle_positions = {}
         self.particle_orientations = {}
@@ -526,6 +529,12 @@ class TestGUI(qt_widgets.QWidget):
             if particle in self.binded_particles: 
                 self.odom_publishers[particle] = rospy.Publisher(self.binded_particles_odom_topic_prefix + str(particle), 
                                                                     Odometry, queue_size=1)
+                
+                if self.subscribe_to_odom_hands:
+                    # Subscribe to the odometry topic for binded particles
+                    self.odom_subscribers[particle] = rospy.Subscriber(self.binded_particles_odom_topic_prefix + str(particle), 
+                                                                        Odometry, self.odom_hands_callback, callback_args=particle, queue_size=1)
+                
             if particle in self.custom_static_particles:
                 self.odom_publishers[particle] = rospy.Publisher(self.odom_topic_prefix + str(particle), 
                                                                     Odometry, queue_size=1)
@@ -535,6 +544,14 @@ class TestGUI(qt_widgets.QWidget):
 
         self.shutdown_timer.timeout.connect(self.check_shutdown)
         self.shutdown_timer.start(1000)  # Timer triggers every 1000 ms (1 second)
+        
+    def odom_hands_callback(self, msg, particle):
+        # Update the particle positions and orientations based on the received odometry message
+        self.particle_positions[particle] = msg.pose.pose.position
+        self.particle_orientations[particle] = msg.pose.pose.orientation
+
+        # Update the particle twists based on the received odometry message
+        self.particle_twists[particle] = msg.twist.twist
 
     def add_sim_controls(self):
         if self.is_orientation_control_enabled:
@@ -1795,14 +1812,14 @@ class TestGUI(qt_widgets.QWidget):
             # Reset spacenav_twist to zero after timeout
             self.spacenav_twist = Twist()
 
-            rospy.loginfo_throttle(2.0,"spacenav_twist is zeroed because it's been long time since the last msg arrived..")
+            rospy.loginfo_throttle(30.0,"spacenav_twist is zeroed because it's been long time since the last msg arrived..")
             
     def check_spacenav_twist2_wait_timeout(self):
         if (rospy.Time.now() - self.last_spacenav_twist2_time) > self.spacenav_twist2_wait_timeout:
             # Reset spacenav_twist to zero after timeout
             self.spacenav_twist2 = Twist()
 
-            rospy.loginfo_throttle(2.0,"spacenav_twist2 is zeroed because it's been long time since the last msg arrived..")
+            rospy.loginfo_throttle(30.0,"spacenav_twist2 is zeroed because it's been long time since the last msg arrived..")
 
     def state_array_callback(self, states_msg):
         # with self.lock:
