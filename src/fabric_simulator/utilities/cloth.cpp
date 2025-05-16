@@ -402,6 +402,7 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
     }
 
     Real eps = 0.0001;
+    bool assign_custom_static_particles = true;
 
     for (int i = 0; i < num_particles_; i++) {
         Real x = pos_(i,0);
@@ -417,9 +418,11 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
                     std::cout << "id: " << i << " is virtually hang as corner 1." << std::endl;
                     changeParticleDynamicity(i,false);
 
-                    // Check if value exists in the custom_static_particles_ vector, if not, add it
-                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
-                        custom_static_particles_.push_back(i);
+                    if (assign_custom_static_particles) {
+                        // Check if value exists in the custom_static_particles_ vector, if not, add it
+                        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                            custom_static_particles_.push_back(i);
+                        }
                     }
                 }
                 break;
@@ -428,9 +431,11 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2." << std::endl;
                     changeParticleDynamicity(i,false);
 
-                    // Check if value exists in the custom_static_particles_ vector, if not, add it
-                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
-                        custom_static_particles_.push_back(i);
+                    if (assign_custom_static_particles) {
+                        // Check if value exists in the custom_static_particles_ vector, if not, add it
+                        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                            custom_static_particles_.push_back(i);
+                        }
                     }
                 }
                 break;
@@ -439,9 +444,11 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2 or 3." << std::endl;
                     changeParticleDynamicity(i,false);
 
-                    // Check if value exists in the custom_static_particles_ vector, if not, add it
-                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
-                        custom_static_particles_.push_back(i);
+                    if (assign_custom_static_particles) {
+                        // Check if value exists in the custom_static_particles_ vector, if not, add it
+                        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                            custom_static_particles_.push_back(i);
+                        }
                     }
                 }
                 break;
@@ -450,9 +457,11 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2 or 3 or 4." << std::endl;
                     changeParticleDynamicity(i,false);
 
-                    // Check if value exists in the custom_static_particles_ vector, if not, add it
-                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
-                        custom_static_particles_.push_back(i);
+                    if (assign_custom_static_particles) {
+                        // Check if value exists in the custom_static_particles_ vector, if not, add it
+                        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                            custom_static_particles_.push_back(i);
+                        }
                     }
                 }
                 break;
@@ -461,9 +470,11 @@ void Cloth::hangFromCorners(const int &num_corners, std::vector<int>& custom_sta
                     std::cout << "id: " << i << " is virtually hang as corners 1 or 2 or 3 or 4." << std::endl;
                     changeParticleDynamicity(i,false);
 
-                    // Check if value exists in the custom_static_particles_ vector, if not, add it
-                    if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
-                        custom_static_particles_.push_back(i);
+                    if (assign_custom_static_particles) {
+                        // Check if value exists in the custom_static_particles_ vector, if not, add it
+                        if (std::find(custom_static_particles_.begin(), custom_static_particles_.end(), i) == custom_static_particles_.end()) {
+                            custom_static_particles_.push_back(i);
+                        }
                     }
                 }
                 break;
